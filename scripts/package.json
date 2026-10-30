@@ -1,0 +1,24 @@
+{
+  "name": "@workspace/scripts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "hello": "tsx ./src/hello.ts",
+    "growthscout:setup": "node ./src/growthscout-buy.mjs --setup",
+    "growthscout:whoami": "node ./src/growthscout-buy.mjs whoami",
+    "growthscout:probe": "node ./src/growthscout-buy.mjs --verbose curl --max-amount 0.0075 -X POST -H 'Content-Type: application/json' --data '{\"query\":\"Celo\"}' https://gateway.usebuy.ai/v1/social/x/posts/search",
+    "growthscout:signer-test": "node --test ./src/growthscout-buy.test.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsx": "catalog:"
+  },
+  "dependencies": {
+    "@workspace/growthscout": "workspace:*",
+    "@celo/buy": "0.8.2",
+    "@celo/buy-keystore": "0.8.2",
+    "viem": "2.57.4"
+  }
+}
