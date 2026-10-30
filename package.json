@@ -17,7 +17,8 @@
     "register": "tsx scripts/register-8004.ts",
     "probe:usat": "tsx scripts/probe-usat.ts",
     "verify-tx": "tsx scripts/verify-tx.ts",
-    "check-signer": "node src/runner.mjs --check-signer"
+    "check-signer": "node src/runner.mjs --check-signer",
+    "check-402": "tsx scripts/check-402.ts"
   },
   "dependencies": {
     "@celo/attribution-tags": "^0.5.0",
