@@ -28,7 +28,7 @@ A growth-intelligence agent for Web3 projects, built for the **Celo "Agents on O
 |---|---|
 | Live URL | _(set after deploy)_ |
 | ERC-8004 agent id / registration tx | _(set after registration)_ |
-| Agent wallet | `0xcDd8758576347a273d29bB816954a37F21506145` |
+| Agent wallet | `0x91a1F1d9CA6f8649A907Fd5EcCf886E46CbCEf32` |
 | Supplier purchases through buy (tx hashes) | _(from the paid run)_ |
 | Customer settlement tx(s) | _(from the paid run)_ |
 
