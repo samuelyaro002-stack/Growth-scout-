@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { after, test } from "node:test";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { BuyClient, type PaidCall } from "../src/buy.js";
+import { BuyClient, type PaidCall, type PurchaseRunner } from "../src/buy.js";
 import { Ledger } from "../src/ledger.js";
 import { createApp } from "../src/server.js";
-import { fakeBuy, testConfig, tmpDir } from "./helpers.js";
+import { fakeRunner, liveTestConfig, testConfig } from "./helpers.js";
 
 const servers: Server[] = [];
 after(() => servers.forEach((s) => s.close()));
@@ -22,6 +20,37 @@ async function listen(app: ReturnType<typeof createApp>): Promise<string> {
 
 const post = (url: string, body: unknown) =>
   fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+
+/** Real x402 middleware in front of the app, with a hermetic facilitator and a signing buyer. The paywall is never bypassed. */
+async function paidApp(cfgOver: Partial<ReturnType<typeof liveTestConfig>>, deps: Parameters<typeof createApp>[1] = {}) {
+  const settles: string[] = [];
+  const fac = createServer((req, res) => {
+    let raw = "";
+    req.on("data", (d) => (raw += d));
+    req.on("end", () => {
+      res.setHeader("content-type", "application/json");
+      const payer = raw ? JSON.parse(raw).paymentPayload?.payload?.authorization?.from : undefined;
+      if (req.url?.startsWith("/supported")) res.end(JSON.stringify({ kinds: [{ x402Version: 2, scheme: "exact", network: "eip155:42220" }], extensions: [], signers: { "eip155:*": [] } }));
+      else if (req.url?.startsWith("/verify")) res.end(JSON.stringify({ isValid: true, payer }));
+      else if (req.url?.startsWith("/settle")) { settles.push(req.url); res.end(JSON.stringify({ success: true, transaction: "0x" + "ee".repeat(32), network: "eip155:42220", payer })); }
+      else res.end("{}");
+    });
+  });
+  servers.push(fac);
+  await new Promise<void>((r) => fac.listen(0, "127.0.0.1", r));
+  const facUrl = `http://127.0.0.1:${(fac.address() as AddressInfo).port}`;
+  const cfg = { ...liveTestConfig({ devNoPaywall: false, facilitatorUrl: facUrl, x402ApiKey: "test-key" }), ...cfgOver };
+  process.env.PAY_TO = privateKeyToAccount(generatePrivateKey()).address;
+  const base = await listen(createApp(cfg, deps));
+  delete process.env.PAY_TO;
+  const { x402Client, wrapFetchWithPayment } = await import("@x402/fetch");
+  const { ExactEvmScheme } = await import("@x402/evm/exact/client");
+  const buyer = privateKeyToAccount(generatePrivateKey());
+  const payingFetch = wrapFetchWithPayment(fetch, new x402Client().register("eip155:*", new ExactEvmScheme(buyer)));
+  const pay = (path: string, body: unknown) => payingFetch(`${base}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  return { base, cfg, pay, settles };
+}
 
 test("paid route with MOCK data: valid request returns a labelled report and evidence", async () => {
   const cfg = testConfig({ MOCK_BUY: "1", DEV_NO_PAYWALL: "1", AGENT_ID: "4242", PUBLIC_URL: "https://scout.example" });
@@ -41,27 +70,27 @@ test("paid route with MOCK data: valid request returns a labelled report and evi
   assert.equal(pulse.report.sources.length, 1);
 });
 
-test("input validation: bad bodies get 400 and nothing is bought", async () => {
-  const dir = tmpDir();
-  const cfg = testConfig({ DEV_NO_PAYWALL: "1", BUY_BIN: fakeBuy(dir, "ok") });
-  const base = await listen(createApp(cfg));
+test("input validation: bad bodies get 400, nothing is bought and nothing is settled", async () => {
+  const f = fakeRunner("ok");
+  const cfg = liveTestConfig();
+  const app = await paidApp({}, { buy: new BuyClient(cfg, new Ledger(cfg.dataDir), f.run as PurchaseRunner) });
   for (const bad of [{}, { project: "" }, { project: "x" }, { project: "ok name", handle: "not a handle!" }, { project: "ok name", keywords: ["a", "b", "c", "d"] }, { project: "bad;`rm -rf`" }]) {
-    const res = await post(`${base}/api/pulse`, bad);
+    const res = await app.pay("/api/pulse", bad);
     assert.equal(res.status, 400, JSON.stringify(bad));
   }
-  const notJson = await fetch(`${base}/api/pulse`, { method: "POST", headers: { "content-type": "application/json" }, body: "{oops" });
-  assert.ok(notJson.status >= 400 && notJson.status < 500);
+  assert.equal(f.calls.length, 0, "nothing was bought for any invalid request");
+  assert.equal(app.settles.length, 0, "a 4xx response must never settle the buyer's payment");
 });
 
 test("when every data purchase fails the route errors (so x402 will NOT settle) and says so", async () => {
-  const dir = tmpDir();
-  const cfg = testConfig({ DEV_NO_PAYWALL: "1", BUY_BIN: fakeBuy(dir, "fail4xx") });
+  const cfg = liveTestConfig();
   const ledger = new Ledger(cfg.dataDir);
-  const base = await listen(createApp(cfg, { ledger }));
-  const res = await post(`${base}/api/pulse`, { project: "Acme" });
+  const app = await paidApp({}, { ledger, buy: new BuyClient(cfg, ledger, fakeRunner("fail").run as PurchaseRunner) });
+  const res = await app.pay("/api/pulse", { project: "Acme" });
   assert.equal(res.status, 502);
   assert.match(((await res.json()) as any).note, /not charged/);
   assert.equal(ledger.summary().customers.reportsGenerated, 0);
+  assert.equal(app.settles.length, 0);
 });
 
 test("one failing source still yields a report with a warning", async () => {
@@ -137,41 +166,43 @@ test("REAL x402 paywall: unpaid request gets a 402 advertising USDC, our price, 
 });
 
 test("a project that nothing mentions is refused (502, not charged) instead of sold as a score", async () => {
-  const dir = tmpDir();
-  const cfg = testConfig({ DEV_NO_PAYWALL: "1", BUY_BIN: fakeBuy(dir, "ok") }); // fake data only ever mentions "Acme"
+  const cfg = liveTestConfig(); // fake data only ever mentions "Acme"
   const ledger = new Ledger(cfg.dataDir);
-  const base = await listen(createApp(cfg, { ledger }));
-  const res = await post(`${base}/api/pulse`, { project: "Zebra Protocol" });
+  const app = await paidApp({}, { ledger, buy: new BuyClient(cfg, ledger, fakeRunner("ok").run as PurchaseRunner) });
+  const res = await app.pay("/api/pulse", { project: "Zebra Protocol" });
   assert.equal(res.status, 502);
   const j = (await res.json()) as any;
   assert.match(j.error, /No usable evidence/);
   assert.match(j.note, /not charged/);
   assert.equal(ledger.summary().customers.reportsGenerated, 0);
+  assert.equal(app.settles.length, 0);
 });
 
 test("few matching posts: the report says LOW CONFIDENCE and never calls unrelated posts relevant", async () => {
-  const cfg = testConfig({ DEV_NO_PAYWALL: "1", BUY_BIN: fakeBuy(tmpDir(), "ok") }); // 2 posts, both mention Acme
-  const base = await listen(createApp(cfg));
-  const j = (await (await post(`${base}/api/pulse`, { project: "Acme" })).json()) as any;
+  const cfg = liveTestConfig(); // 2 posts, both mention Acme, neither carries a publication date
+  const app = await paidApp({}, { buy: new BuyClient(cfg, new Ledger(cfg.dataDir), fakeRunner("ok").run as PurchaseRunner) });
+  const j = (await (await app.pay("/api/pulse", { project: "Acme" })).json()) as any;
   assert.equal(j.report.confidence, "low");
-  assert.deepEqual(j.report.evidence, { postsReturned: 2, postsMatched: 2 });
+  assert.equal(j.report.evidence.postsReturned, 2);
+  assert.equal(j.report.evidence.postsMatched, 2);
+  assert.equal(j.report.evidence.recentPosts, 0, "undated posts are never counted as recent evidence");
   assert.match(j.report.summary, /LOW CONFIDENCE/);
   assert.match(j.report.methodology, /does not measure where the audience actually lives/);
 });
 
 test("cache hit: the second response bought nothing and must not reuse the first one's purchase evidence", async () => {
-  const dir = tmpDir();
-  const cfg = testConfig({ DEV_NO_PAYWALL: "1", BUY_BIN: fakeBuy(dir, "ok") });
+  const f = fakeRunner("ok");
+  const cfg = liveTestConfig();
   const ledger = new Ledger(cfg.dataDir);
-  const base = await listen(createApp(cfg, { ledger }));
-  const first = (await (await post(`${base}/api/pulse`, { project: "Acme" })).json()) as any;
-  const second = (await (await post(`${base}/api/pulse`, { project: "Acme" })).json()) as any;
+  const app = await paidApp({}, { ledger, buy: new BuyClient(cfg, ledger, f.run as PurchaseRunner) });
+  const first = (await (await app.pay("/api/pulse", { project: "Acme" })).json()) as any;
+  const second = (await (await app.pay("/api/pulse", { project: "Acme" })).json()) as any;
   assert.equal(first.evidence.cached, false);
   assert.equal(first.evidence.supplierPurchases.length, 1);
   assert.equal(second.evidence.cached, true);
   assert.deepEqual(second.evidence.supplierPurchases, []);
   assert.ok(second.warnings.some((w: string) => /cache/.test(w)));
-  assert.equal(readFileSync(join(dir, "calls.log"), "utf8").trim().split("\n").length, 1, "only one purchase in total");
+  assert.equal(f.calls.length, 1, "only one purchase in total");
   assert.equal(ledger.summary().supplier.paidCalls, 1);
 });
 

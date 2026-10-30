@@ -1,5 +1,5 @@
 import { codeFromRepo, toDataSuffix, withAttribution } from "@celo/attribution-tags";
-import { createPublicClient, createWalletClient, http, type Account, type Hex, type Transport } from "viem";
+import { createPublicClient, createWalletClient, http, type Account, type Hex, type Transport, type PublicClient } from "viem";
 import { celo } from "./chain.js";
 
 const CODE_RE = /^[a-z0-9_]{1,32}$/;
@@ -41,6 +41,6 @@ export function makeTaggedWalletClient(account: Account, code: string, transport
   return createWalletClient({ account, chain: celo, transport }).extend(withAttribution(code));
 }
 
-export function makePublicClient(rpcUrl?: string) {
+export function makePublicClient(rpcUrl?: string): PublicClient<Transport, typeof celo> {
   return createPublicClient({ chain: celo, transport: http(rpcUrl) });
 }

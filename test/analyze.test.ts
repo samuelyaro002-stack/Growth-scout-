@@ -4,7 +4,9 @@ import { analyze, band } from "../src/analyze.js";
 import { mockResponse } from "../src/mock.js";
 import { normalizeItems, type Post } from "../src/sources.js";
 
-const mk = (over: Partial<Post>): Post => ({ source: "x", text: "Acme news", likes: 0, replies: 0, shares: 0, views: 0, ...over });
+const NOW = new Date("2026-10-27T12:00:00Z");
+const mk = (over: Partial<Post>): Post => ({ source: "x", text: "Acme news", likes: 0, replies: 0, shares: 0, views: 0, publishedAt: "2026-10-25T08:00:00Z", ...over });
+const an = (input: Parameters<typeof analyze>[0]) => analyze({ now: NOW, ...input });
 const fixtures = (name: string) => ({
   x: normalizeItems("x", mockResponse("x", name)),
   reddit: normalizeItems("reddit", mockResponse("reddit", name)),
@@ -12,7 +14,7 @@ const fixtures = (name: string) => ({
 });
 
 test("fixture audit produces a bounded, fully populated report", () => {
-  const r = analyze({ project: "Acme", terms: ["Acme"], tier: "audit", bySource: fixtures("Acme"), mock: true });
+  const r = an({ project: "Acme", terms: ["Acme"], tier: "audit", bySource: fixtures("Acme"), mock: true });
   assert.ok(r.score >= 0 && r.score <= 100);
   assert.equal(r.mock, true);
   assert.equal(r.sources.length, 3);
@@ -25,15 +27,16 @@ test("fixture audit produces a bounded, fully populated report", () => {
 
 test("analysis is deterministic for the same input", () => {
   const now = new Date("2026-10-12T00:00:00Z");
-  const a = analyze({ project: "Acme", terms: ["Acme"], tier: "audit", bySource: fixtures("Acme"), mock: true, now });
-  const b = analyze({ project: "Acme", terms: ["Acme"], tier: "audit", bySource: fixtures("Acme"), mock: true, now });
+  const a = an({ project: "Acme", terms: ["Acme"], tier: "audit", bySource: fixtures("Acme"), mock: true, now });
+  const b = an({ project: "Acme", terms: ["Acme"], tier: "audit", bySource: fixtures("Acme"), mock: true, now });
   assert.deepEqual(a, b);
 });
 
 test("no data at all yields a high-priority visibility recommendation, not a crash", () => {
-  const r = analyze({ project: "Ghost", terms: ["Ghost"], tier: "pulse", bySource: { x: [] }, mock: false });
+  const r = an({ project: "Ghost", terms: ["Ghost"], tier: "pulse", bySource: { x: [] }, mock: false });
   assert.equal(r.metrics.relevantPosts, 0);
-  assert.equal(r.recommendations[0].priority, "high");
+  assert.equal(r.confidence, "low");
+  assert.equal(r.recommendations[0].evidenceStatus, "limited", "no data must never produce an actionable growth plan");
 });
 
 test("Africa detection matches real markets and ignores look-alike substrings", () => {
@@ -43,30 +46,34 @@ test("Africa detection matches real markets and ignores look-alike substrings", 
     mk({ text: "Acme makes snakes and ladders fun", author: "c" }),
     mk({ text: "Acme explained for devs", author: "d" }),
   ];
-  const r = analyze({ project: "Acme", terms: ["Acme"], tier: "pulse", bySource: { x: posts }, mock: false });
+  const r = an({ project: "Acme", terms: ["Acme"], tier: "pulse", bySource: { x: posts }, mock: false });
   assert.equal(r.africa.posts, 2);
   assert.equal(r.africa.share, 0.5);
 });
 
 test("scam talk lowers sentiment and triggers the trust recommendation", () => {
-  const posts = Array.from({ length: 5 }, (_, i) => mk({ text: "Acme is a scam, total rug, my funds are stuck", author: `u${i}` }));
-  const r = analyze({ project: "Acme", terms: ["Acme"], tier: "pulse", bySource: { x: posts }, mock: false });
+  const text = "Acme is a scam, total rug, my funds are stuck";
+  const x = Array.from({ length: 4 }, (_, i) => mk({ text, author: `u${i}` }));
+  const reddit = Array.from({ length: 3 }, (_, i) => mk({ source: "reddit", text, author: `r${i}` }));
+  const r = an({ project: "Acme", terms: ["Acme"], tier: "audit", bySource: { x, reddit, youtube: [] }, mock: false });
   assert.ok(r.sentiment.net < 0);
   assert.ok(r.sentiment.riskFlags >= 5);
-  assert.ok(r.recommendations.some((x) => x.title.startsWith("Trust signals")));
+  assert.ok(r.recommendations.some((x) => x.title.includes("Trust signals")));
 });
 
 test("one dominant author triggers the voice-concentration recommendation", () => {
-  const posts = [...Array.from({ length: 8 }, () => mk({ author: "loud" })), mk({ author: "quiet" }), mk({ author: "other" })];
-  const r = analyze({ project: "Acme", terms: ["Acme"], tier: "pulse", bySource: { x: posts }, mock: false });
+  const x = [...Array.from({ length: 8 }, () => mk({ author: "loud" })), mk({ author: "quiet" })];
+  const reddit = [mk({ source: "reddit", author: "other" })];
+  const r = an({ project: "Acme", terms: ["Acme"], tier: "audit", bySource: { x, reddit, youtube: [] }, mock: false });
   assert.ok(r.metrics.topAuthorShare > 0.4);
   assert.ok(r.recommendations.some((x) => x.title.includes("handful of voices")));
 });
 
 test("missing Reddit/YouTube footprint is called out only for sources actually queried", () => {
-  const pulse = analyze({ project: "Acme", terms: ["Acme"], tier: "pulse", bySource: { x: [mk({})] }, mock: false });
+  const three = [mk({ author: "a" }), mk({ author: "b" }), mk({ author: "c" })];
+  const pulse = an({ project: "Acme", terms: ["Acme"], tier: "pulse", bySource: { x: three }, mock: false });
   assert.ok(!pulse.recommendations.some((x) => x.title.includes("Reddit")));
-  const audit = analyze({ project: "Acme", terms: ["Acme"], tier: "audit", bySource: { x: [mk({})], reddit: [], youtube: [] }, mock: false });
+  const audit = an({ project: "Acme", terms: ["Acme"], tier: "audit", bySource: { x: three, reddit: [], youtube: [] }, mock: false });
   assert.ok(audit.recommendations.some((x) => x.title.includes("Reddit")));
   assert.ok(audit.recommendations.some((x) => x.title.includes("video")));
 });

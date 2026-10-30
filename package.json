@@ -6,35 +6,35 @@
   "private": true,
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.15"
   },
   "scripts": {
-    "start": "tsx src/server.ts",
-    "dev": "tsx watch src/server.ts",
+    "start": "node --import tsx src/server.ts",
+    "dev": "node --import tsx --watch src/server.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test test/*.test.ts",
     "check-tag": "tsx scripts/check-tag.ts",
     "register": "tsx scripts/register-8004.ts",
     "probe:usat": "tsx scripts/probe-usat.ts",
-    "probe:buy": "tsx scripts/probe-buy.ts",
     "verify-tx": "tsx scripts/verify-tx.ts",
-    "setup:buy": "bash scripts/setup-buy.sh"
+    "check-signer": "node src/runner.mjs --check-signer"
   },
   "dependencies": {
     "@celo/attribution-tags": "^0.5.0",
     "@celo/buy": "0.8.2",
+    "@celo/buy-keystore": "^0.8.2",
     "@x402/core": "^2.28.0",
     "@x402/evm": "^2.28.0",
     "@x402/express": "^2.28.0",
     "@x402/extensions": "^2.28.0",
     "express": "^5.3.0",
+    "tsx": "^4.23.15",
     "viem": "^2.57.5"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.5",
     "@x402/fetch": "^2.28.0",
-    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
 }

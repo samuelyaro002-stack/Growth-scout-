@@ -1,0 +1,42 @@
+# Render Blueprint: free web service built from this public repo.
+# Secrets (sync: false) are entered in the Render dashboard, never committed.
+services:
+  - type: web
+    name: growth-scout
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.22.0
+      - key: NODE_ENV
+        value: production
+      # public, non-secret
+      - key: BUILDER_CODE
+        value: celo_16de1003cce6
+      - key: BUY_ACCOUNT
+        value: agent
+      - key: BUY_HOME
+        value: /tmp/buy-home
+      - key: DATA_DIR
+        value: /tmp/growthscout-data
+      - key: BUY_ALLOWED_SOURCES
+        value: x,reddit,youtube
+      - key: MAX_SPEND_PER_REQUEST_USD
+        value: "0.0225"
+      - key: DAILY_SPEND_CAP_USD
+        value: "0.05"
+      # live supplier buying stays OFF until you set this to 1 in the dashboard
+      - key: REPORT_PURCHASES_ENABLED
+        value: "0"
+      # secrets / per-deployment values: set in the dashboard
+      - key: AGENT_PRIVATE_KEY
+        sync: false
+      - key: X402_API_KEY
+        sync: false
+      - key: PUBLIC_URL
+        sync: false
+      - key: AGENT_ID
+        sync: false

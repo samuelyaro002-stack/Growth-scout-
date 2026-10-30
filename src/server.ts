@@ -13,7 +13,10 @@ import { mockResponse } from "./mock.js";
 import { analyze } from "./analyze.js";
 import { normalizeItems } from "./sources.js";
 import { buildAccepts } from "./pricing.js";
-import { checkRepoMatchesCode, assertValidCode } from "./tag.js";
+import { assertValidCode, checkRepoMatchesCode } from "./tag.js";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { randomUUID } from "node:crypto";
+import type { BudgetLedger } from "./ledger.js";
 
 export function resolvePayTo(cfg: Config): string {
   if (process.env.PAY_TO) return process.env.PAY_TO.trim();
@@ -70,36 +73,53 @@ code,pre{font:13px ui-monospace,monospace}pre{overflow:auto;background:var(--bg)
 }
 
 export interface AppDeps {
-  ledger?: Ledger;
+  onUnexpectedError?: () => void;
+  parseReportRequest?: (body: unknown) => ReturnType<typeof parseRequest>;
+  validateReportResponse?: (body: unknown) => unknown;
+  ledger?: BudgetLedger;
   buy?: BuyClient;
 }
 
 export function createApp(cfg: Config, deps: AppDeps = {}): Express {
+  if (cfg.devNoPaywall && (!cfg.mockBuy || process.env.NODE_ENV === "production")) {
+    throw new Error("Paywall bypass requires local fixture mode.");
+  }
   assertValidCode(cfg.builderCode);
-  const ledger = deps.ledger ?? new Ledger(cfg.dataDir);
+  const ledger: BudgetLedger = deps.ledger ?? new Ledger(cfg.dataDir);
   const buy = deps.buy ?? new BuyClient(cfg, ledger);
   const agent = new GrowthAgent(buy, cfg.mockBuy);
-
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "8kb" }));
+  const reportContext = new AsyncLocalStorage<{ reportId: string }>();
+  app.use((_req, _res, next) => reportContext.run({ reportId: randomUUID() }, next));
 
   // ---- free routes (registered before the paywall) ----
   app.get("/", (_req, res) => res.type("html").send(landing(cfg)));
-  app.get("/health", (_req, res) => res.json({ ok: true, mock: cfg.mockBuy, paywall: !cfg.devNoPaywall, agentId: cfg.agentId || null }));
+  app.get("/health", async (_req, res) => {
+    const budgetReady = await ledger.ready(cfg.dailySpendCapUsd);
+    res.json({ ok: true, mock: cfg.mockBuy, paywall: !cfg.devNoPaywall, purchasesEnabled: cfg.reportPurchasesEnabled && budgetReady, agentId: cfg.agentId || null });
+  });
   app.get("/.well-known/agent.json", (_req, res) => res.json(buildRegistrationFile(cfg)));
-  app.get("/api/receipts", (_req, res) =>
-    res.json({
+  app.get("/api/growthscout/health", async (_req, res) => {
+    const budgetReady = await ledger.ready(cfg.dailySpendCapUsd);
+    res.json({ ok: true, mock: cfg.mockBuy, paywall: !cfg.devNoPaywall,
+      purchasesEnabled: cfg.reportPurchasesEnabled && budgetReady,
+      budgetReady, agentId: cfg.agentId || null });
+  });
+  app.get("/api/growthscout/agent", (_req, res) => res.json(buildRegistrationFile(cfg)));
+  app.get("/api/receipts", async (_req, res) => {
+    try { res.json({
       builderCode: cfg.builderCode,
       agentId: cfg.agentId || null,
-      ...ledger.summary(),
-      spentTodayWorstCaseUsd: Number(ledger.spentToday().toFixed(6)),
+      ...await ledger.summary(),
+      spentTodayWorstCaseUsd: Number((await ledger.spentToday()).toFixed(6)),
       notes: [
         "supplier = what the agent bought through buy; customers.confirmedPayments counts only payments the x402 facilitator confirmed.",
         "reportsGenerated can exceed confirmedPayments: a report that was generated but whose payment did not settle is not a sale.",
       ],
-    }),
-  );
+    }); } catch { res.status(503).json({ error: "Shared receipt authority unavailable; no empty or reset totals returned." }); }
+  });
   app.get("/api/sample", (_req, res) => {
     const name = "SampleProject";
     const bySource = {
@@ -126,10 +146,25 @@ export function createApp(cfg: Config, deps: AppDeps = {}): Express {
     const server = new x402ResourceServer(facilitator);
     server.register("eip155:*", new ExactEvmScheme());
     server.registerExtension(builderCodeResourceServerExtension);
+    // Durable intent precedes the external settlement side effect. If its later
+    // receipt write fails, this remains visibly unresolved instead of counting a sale.
+    server.onBeforeSettle(async ctx => {
+      try {
+        await ledger.append({
+          kind: "customer_pending", endpoint: "x402",
+          usd: Number(ctx.requirements.amount) / 1e6, asset: ctx.requirements.asset,
+          ok: false, reportId: reportContext.getStore()?.reportId,
+        });
+      } catch {
+        // x402 logs and ignores thrown hook errors. Its explicit abort contract is required.
+        return { abort: true, reason: "receipt_authority_unavailable", message: "Payment was not submitted: durable receipt intent unavailable." };
+      }
+      return undefined;
+    });
     // The only place a customer payment is counted as real: after the facilitator confirms settlement.
     server.onAfterSettle(async (ctx) => {
       if (!ctx.result.success) return;
-      ledger.append({
+      try { await ledger.append({
         kind: "settled",
         endpoint: "x402",
         usd: Number(ctx.requirements.amount) / 1e6,
@@ -137,7 +172,12 @@ export function createApp(cfg: Config, deps: AppDeps = {}): Express {
         payer: ctx.result.payer,
         asset: ctx.requirements.asset,
         ok: true,
-      });
+        reportId: reportContext.getStore()?.reportId,
+      }); } catch {
+        // Settlement may already be irreversible. Keep the durable pending intent,
+        // do not retry, and never claim that this customer was not charged.
+        deps.onUnexpectedError?.();
+      }
     });
     app.use(paymentMiddleware(buildRoutes(cfg, payTo), server));
   }
@@ -145,17 +185,22 @@ export function createApp(cfg: Config, deps: AppDeps = {}): Express {
   // ---- paid routes ----
   const paid = (tier: Tier) => async (req: Request, res: Response) => {
     try {
-      const request = parseRequest(req.body);
+      const request = (deps.parseReportRequest ?? parseRequest)(req.body);
+      // Even cached reports need durable generated/customer evidence before settlement.
+      if (!await ledger.ready(cfg.dailySpendCapUsd)) throw new SpendCapError("Shared authority unavailable.");
       const { report, paidCalls, warnings, cached } = await agent.run(request, tier);
       // "generated" is NOT a sale: the customer's payment settles after this handler returns.
-      ledger.append({ kind: "generated", endpoint: `/api/${tier}`, usd: 0, ok: true, note: cached ? "cache hit" : undefined });
-      res.json({ report, evidence: { builderCode: cfg.builderCode, agentId: cfg.agentId || null, cached, supplierPurchases: paidCalls }, warnings });
+      const payload = { report, evidence: { builderCode: cfg.builderCode, agentId: cfg.agentId || null, cached, supplierPurchases: paidCalls }, warnings };
+      const validated = deps.validateReportResponse ? deps.validateReportResponse(payload) : payload;
+      await ledger.append({ kind: "generated", endpoint: `/api/${tier}`, usd: 0, ok: true,
+        reportId: reportContext.getStore()?.reportId, note: cached ? "cache hit" : undefined });
+      res.json(validated);
     } catch (e) {
       // 4xx/5xx here means the x402 middleware does NOT settle the buyer's payment.
       if (e instanceof ValidationError) return void res.status(400).json({ error: e.message });
       if (e instanceof SpendCapError) return void res.status(503).json({ error: "temporarily unavailable: spend limit reached, you were not charged" });
       if (e instanceof ReportError) return void res.status(502).json({ error: e.message, note: "you were not charged" });
-      console.error("unexpected error", e);
+      deps.onUnexpectedError?.();
       res.status(500).json({ error: "internal error, you were not charged" });
     }
   };

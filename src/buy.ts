@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import type { Config } from "./config.js";
-import { SpendCapError, type Ledger } from "./ledger.js";
+import { SpendCapError, type BudgetLedger } from "./ledger.js";
 import { mockResponse } from "./mock.js";
 import type { Source } from "./sources.js";
 
@@ -75,17 +75,24 @@ const TX_RE = /0x[a-fA-F0-9]{64}/;
 /** --verbose writes one JSON object per line to stderr; find the settlement tx hash in there. */
 export function findSettlementTx(stderr: string): string | undefined {
   let found: string | undefined;
+  const inspect = (value: unknown, depth = 0): void => {
+    if (depth > 5 || !value || typeof value !== "object") return;
+    for (const [key, item] of Object.entries(value)) {
+      if (/^(transaction|txHash|tx)$/i.test(key) && typeof item === "string" && /^0x[a-fA-F0-9]{64}$/.test(item)) found = item;
+      if (key === "log" && typeof item === "string") {
+        const match = item.replace(/\u001b\[[0-9;]*m/g, "").match(/^paid →\s*(0x[a-fA-F0-9]{64})\b/);
+        if (match) found = match[1];
+      }
+      inspect(item, depth + 1);
+    }
+  };
   for (const line of stderr.split("\n")) {
     if (!line.includes("0x")) continue;
     try {
-      const obj = JSON.parse(line) as Record<string, unknown>;
-      const text = JSON.stringify(obj);
-      const looksLikeSettlement = /settle|transaction|txHash|tx/i.test(text);
-      const m = text.match(TX_RE);
-      if (m && looksLikeSettlement) found = m[0];
+      inspect(JSON.parse(line));
     } catch {
-      const m = line.match(TX_RE);
-      if (m && /settle|transaction|tx/i.test(line)) found = m[0];
+      const match = line.replace(/\u001b\[[0-9;]*m/g, "").match(/^paid →\s*(0x[a-fA-F0-9]{64})\b/);
+      if (match) found = match[1];
     }
   }
   return found;
@@ -128,26 +135,29 @@ export function isUncertain(text: string): boolean {
   return /settle_uncertain|provision_failed|\b500\b/i.test(text);
 }
 
-function run(bin: string, args: string[], timeoutMs: number) {
+export interface RunResult { code: number; stdout: string; stderr: string }
+export type PurchaseRunner = (bin: string, args: string[], timeoutMs: number, env: NodeJS.ProcessEnv) => Promise<RunResult>;
+const run: PurchaseRunner = (bin, args, timeoutMs, env) => {
   return new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
-    execFile(bin, args, { timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execFile(bin, args, { timeout: timeoutMs, env, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
       let code = 0;
       let extra = "";
       if (err) {
         const c = (err as { code?: unknown }).code;
         code = typeof c === "number" ? c : 1;
         // spawn failures (ENOENT: buy not installed) and timeouts carry a string code
-        if (typeof c === "string" || (err as { killed?: boolean }).killed) extra = `\n${String(c ?? "killed")}: ${err.message}`;
+        if (typeof c === "string" || (err as { killed?: boolean }).killed) extra = "\nprocess_failure";
       }
       resolve({ code, stdout: String(stdout ?? ""), stderr: String(stderr ?? "") + extra });
     });
   });
-}
+};
 
 export class BuyClient {
   constructor(
     private readonly cfg: Config,
-    private readonly ledger: Ledger,
+    private readonly ledger: BudgetLedger,
+    private readonly runner: PurchaseRunner = run,
   ) {}
 
   /**
@@ -162,6 +172,9 @@ export class BuyClient {
     if (this.cfg.mockBuy) {
       return { source, endpoint: url, ok: true, body: mockResponse(source, query), usd: 0, uncertain: false, mock: true };
     }
+    if (!this.cfg.reportPurchasesEnabled) throw new SpendCapError("Live report purchases are disabled.");
+    if (!this.cfg.buyAllowedSources.includes(source)) throw new SpendCapError("Source is not enabled for purchases.");
+    if (this.cfg.buyPayToken !== "USDC") throw new SpendCapError("Only USDC supplier payments are permitted.");
 
     // Worst case for this call: headroom over the catalogue price, limited by what this request may still spend.
     const remaining = this.cfg.maxSpendPerRequestUsd - spend.capUsd;
@@ -170,46 +183,70 @@ export class BuyClient {
         `per-request spend cap $${this.cfg.maxSpendPerRequestUsd.toFixed(3)} would be exceeded (worst case so far $${spend.capUsd.toFixed(3)}, next call at least $${ep.priceUsd.toFixed(3)})`,
       );
     }
-    const maxUsd = Math.min(ep.priceUsd * MAX_AMOUNT_HEADROOM, remaining);
+    const maxUsd = Math.min(this.cfg.buyMaxCallUsd[source], ep.priceUsd * MAX_AMOUNT_HEADROOM, remaining);
+    if (maxUsd < ep.priceUsd) throw new SpendCapError("Per-call limit is below the catalogue price.");
     // Hold the worst-case amount from today's budget BEFORE signing, so concurrent requests share one budget.
-    const release = this.ledger.reserve(maxUsd, this.cfg.dailySpendCapUsd);
+    // Hold request budget BEFORE the first await: async DB calls must not introduce a race.
+    spend.capUsd += maxUsd;
+    const release = await this.ledger.reserve(maxUsd, this.cfg.dailySpendCapUsd);
+
+    // Only the signer child receives the key. Never inherit session/API secrets or NODE_OPTIONS.
+    const env: NodeJS.ProcessEnv = {
+      PATH: process.env.PATH, HOME: process.env.HOME, TZ: process.env.TZ,
+      SSL_CERT_FILE: process.env.SSL_CERT_FILE, SSL_CERT_DIR: process.env.SSL_CERT_DIR,
+      AGENT_PRIVATE_KEY: this.cfg.privateKey,
+      BUY_HOME: this.cfg.buyHome, BUY_ACCOUNT: this.cfg.buyAccount,
+      REPORT_PURCHASES_ENABLED: "1",
+      GROWTHSCOUT_BUY_POLICY: JSON.stringify({
+        sources: this.cfg.buyAllowedSources,
+        maxCallUsd: this.cfg.buyMaxCallUsd,
+        dailyCapUsd: this.cfg.dailySpendCapUsd,
+      }),
+    };
 
     try {
-      const { code, stdout, stderr } = await run(
+      const { code, stdout, stderr } = await this.runner(
         this.cfg.buyBin,
-        buildBuyArgs(url, body, maxUsd, this.cfg.buyPayToken, this.cfg.buyAccount),
+        [this.cfg.buyRunner, "--report", ...buildBuyArgs(url, body, maxUsd, "USDC")],
         120_000,
+        env,
       );
 
-      const tx = findSettlementTx(stderr);
-      const parsed = parseBody(stdout);
+      // A key is also a 64-hex string: never mistake an echoed secret for a tx.
+      const scrub = (text: string) => this.cfg.privateKey.length >= 64
+        ? text.replace(new RegExp(this.cfg.privateKey, "gi"), "[redacted]")
+          .replace(new RegExp(this.cfg.privateKey.replace(/^0x/i, ""), "gi"), "[redacted]")
+        : text;
+      const safeStderr = scrub(stderr);
+      const tx = findSettlementTx(safeStderr);
+      const parsed = parseBody(scrub(stdout));
 
-      if (code === 0 && parsed !== null) {
-        const quoted = parseQuotedUsd(stderr, maxUsd);
+      if (code === 0 && parsed !== null && tx) {
+        const quoted = parseQuotedUsd(safeStderr, maxUsd);
         const usd = quoted ?? ep.priceUsd;
         const capUsd = quoted !== undefined ? quoted : maxUsd; // unreadable quote: assume the worst for the caps
         spend.usd += usd;
-        spend.capUsd += capUsd;
-        this.ledger.append({
-          kind: "spend", endpoint: url, usd, capUsd, estimated: quoted === undefined, tx, ok: true,
+        spend.capUsd -= maxUsd - capUsd;
+        await this.ledger.append({
+          kind: "spend", endpoint: url, usd, capUsd, estimated: quoted === undefined, tx, ok: true, reservationId: release.id,
           note: quoted === undefined ? "amount = catalogue price (quote not readable)" : "amount = buy's quote",
         });
         return { source, endpoint: url, ok: true, body: parsed, usd, tx, uncertain: false, mock: false };
       }
 
-      const detail = `${stderr}\n${stdout}`.trim().slice(0, 500);
-      const uncertain = isUncertain(detail) || (code === 0 && parsed === null);
-      if (uncertain) {
-        spend.usd += ep.priceUsd;
-        spend.capUsd += maxUsd; // may have settled: count the worst case
-      }
-      this.ledger.append({
+      // Do not persist subprocess output: SDK/provider errors can contain secrets or signatures.
+      // Exit codes and provider text cannot prove no money moved. Keep every failed
+      // launched invocation held, even when its message resembles a pre-sign rejection.
+      const uncertain = true;
+      const detail = "Supplier payment status uncertain; not retried.";
+      spend.usd += ep.priceUsd;
+      await this.ledger.append({
         kind: "spend", endpoint: url, usd: uncertain ? ep.priceUsd : 0, capUsd: uncertain ? maxUsd : 0,
-        estimated: uncertain, tx, ok: false, uncertain, note: detail.slice(0, 200),
+        estimated: uncertain, tx, ok: false, uncertain, note: detail, reservationId: release.id,
       });
-      return { source, endpoint: url, ok: false, body: null, usd: 0, tx, uncertain, mock: false, error: detail || `buy exited ${code}` };
+      return { source, endpoint: url, ok: false, body: null, usd: uncertain ? ep.priceUsd : 0, tx, uncertain, mock: false, error: detail };
     } finally {
-      release();
+      await release();
     }
   }
 }

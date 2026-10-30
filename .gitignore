@@ -6,3 +6,6 @@ data/*.jsonl
 data/*.json
 *.log
 .buy/
+data/ledger.lock/
+data/ledger.jsonl
+.growthscout-buy/

@@ -41,7 +41,10 @@ const AUTHORS = ["cryptonaija", "defi_lena", "builder_kofi", "web3_amara", "chai
 export function mockResponse(source: Source, query: string): unknown {
   const rand = seeded(`${source}:${query.toLowerCase()}`);
   const n = 8 + Math.floor(rand() * 8);
+  // Day-granular "recent" timestamps: deterministic within a UTC day, always inside the 30-day recency window.
+  const dayStart = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
   const rows = Array.from({ length: n }, (_, i) => {
+    const created = new Date(dayStart - (i % 20) * 36 * 3600 * 1000).toISOString();
     const text = TEMPLATES[Math.floor(rand() * TEMPLATES.length)].replace("{p}", query);
     const author = AUTHORS[Math.floor(rand() * AUTHORS.length)];
     const pop = Math.floor(rand() * rand() * 400);
@@ -54,6 +57,7 @@ export function mockResponse(source: Source, query: string): unknown {
         replyCount: Math.floor(pop / 8),
         retweetCount: Math.floor(pop / 5),
         viewCount: pop * 40,
+        created_at: created,
         url: `https://x.com/${author}/status/${1000 + i}`,
       };
     }
@@ -66,6 +70,7 @@ export function mockResponse(source: Source, query: string): unknown {
         score: pop,
         num_comments: Math.floor(pop / 6),
         permalink: `/r/defi/comments/${i}`,
+        created_at: created,
       };
     }
     return {
@@ -75,6 +80,7 @@ export function mockResponse(source: Source, query: string): unknown {
       viewCount: pop * 90,
       likeCount: Math.floor(pop / 2),
       commentCount: Math.floor(pop / 12),
+      publishedAt: created,
     };
   });
   return { data: rows };

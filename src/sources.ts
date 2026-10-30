@@ -4,7 +4,7 @@
  * The gateway's response schemas for the social endpoints are not documented publicly, and some
  * routes proxy third-party scrapers whose field names differ (likeCount vs favorite_count vs score).
  * So this is deliberately defensive: find the first array of objects, then read each field through
- * a list of known aliases. `npm run probe:buy` prints a real response so the aliases can be tuned.
+ * a list of known aliases. Replit recorded the first live X response; if a source returns zero normalized posts, tune the aliases below.
  */
 
 export type Source = "x" | "reddit" | "youtube";
@@ -15,6 +15,8 @@ export interface Post {
   text: string;
   author?: string;
   url?: string;
+  /** Provider publication time; retrieval time is not a substitute. */
+  publishedAt?: string;
   likes: number;
   replies: number;
   shares: number;
@@ -100,7 +102,63 @@ const SHARE_KEYS = ["retweets", "retweet_count", "retweetCount", "shares", "shar
 const VIEW_KEYS = ["views", "view_count", "viewCount", "impressions", "play_count", "playCount"];
 const AUTHOR_KEYS = ["author", "username", "user", "screen_name", "channelTitle", "channel", "subreddit", "handle"];
 const ID_KEYS = ["id", "id_str", "videoId", "video_id", "rest_id", "name"];
-const URL_KEYS = ["url", "permalink", "link", "postUrl"];
+const URL_KEYS_BY_SOURCE: Record<Source, string[]> = {
+  x: ["permalink", "url", "postUrl", "link"],
+  // A Reddit `url` often points to an external article; the permalink identifies the post.
+  reddit: ["permalink", "postUrl", "url", "link"],
+  youtube: ["permalink", "url", "watch_url", "video_url", "link", "postUrl"],
+};
+const PUBLISHED_AT_KEYS = [
+  "publishedAt", "published_at", "created_at", "createdAt", "posted_at",
+  "upload_date", "published", "created", "date", "timestamp",
+];
+
+function toPublishedAt(value: unknown): string | undefined {
+  let time: number;
+  if (value instanceof Date) time = value.getTime();
+  else if (typeof value === "number" && Number.isFinite(value)) {
+    time = Math.abs(value) >= 100_000_000_000 ? value : value * 1000;
+  } else if (typeof value === "string") {
+    const normalized = value.trim();
+    if (!normalized) return undefined;
+    if (/^\d{10}(?:\.\d+)?$/.test(normalized)) time = Number(normalized) * 1000;
+    else if (/^\d{13}$/.test(normalized)) time = Number(normalized);
+    else time = Date.parse(normalized);
+  } else return undefined;
+  return Number.isFinite(time) && Math.abs(time) <= 8.64e15 ? new Date(time).toISOString() : undefined;
+}
+
+/** Canonicalize only well-formed web URLs. Different platform URLs stay distinct. */
+export function canonicalPostUrl(_source: Source, raw: string | undefined): string | undefined {
+  if (!raw || raw.length > 2048) return undefined;
+  let url: URL;
+  try { url = new URL(raw); } catch { return undefined; }
+  if (!["https:", "http:"].includes(url.protocol) || url.username || url.password) return undefined;
+  const host = url.hostname.toLowerCase().replace(/^www\./, "");
+  let path = url.pathname.replace(/\/{2,}/g, "/").replace(/\/+$/, "") || "/";
+
+  if (["twitter.com", "x.com"].includes(host)) {
+    // Query strings and fragments on status links are tracking/client state, not identity.
+    path = path.replace(/^\/([^/]+)\/status\/(\d+)(?:\/.*)?$/i,
+      (_match, user: string, id: string) => `/${user.toLowerCase()}/status/${id}`);
+    return `https://x.com${path}`;
+  }
+  if (["reddit.com", "old.reddit.com", "redd.it"].includes(host)) {
+    let id: string | undefined;
+    if (host === "redd.it") id = path.split("/").filter(Boolean)[0];
+    else id = path.match(/\/comments\/([a-z0-9]+)(?:\/|$)/i)?.[1];
+    return id ? `https://reddit.com/comments/${id.toLowerCase()}` : `https://reddit.com${path}`;
+  }
+  if (["youtube.com", "m.youtube.com", "youtu.be"].includes(host)) {
+    const id = host === "youtu.be"
+      ? path.split("/").filter(Boolean)[0]
+      : path.match(/^\/(?:shorts|embed|live)\/([^/]+)/i)?.[1] ??
+        (path === "/watch" ? url.searchParams.get("v") ?? undefined : undefined);
+    if (id && /^[\w-]{6,20}$/.test(id)) return `https://youtube.com/watch?v=${id}`;
+    return `https://youtube.com${path}`;
+  }
+  return undefined;
+}
 
 export function normalizeItems(source: Source, body: unknown): Post[] {
   const posts: Post[] = [];
@@ -114,13 +172,15 @@ export function normalizeItems(source: Source, body: unknown): Post[] {
     }
     if (!text.trim()) continue;
     const id = pick(item, ID_KEYS);
-    const url = pick(item, URL_KEYS);
+    const url = pick(item, URL_KEYS_BY_SOURCE[source]);
+    const publishedAt = toPublishedAt(pick(item, PUBLISHED_AT_KEYS));
     posts.push({
       source,
       id: typeof id === "string" || typeof id === "number" ? String(id) : undefined,
       text: text.trim().slice(0, 600),
       author: toAuthor(pick(item, AUTHOR_KEYS)),
       url: typeof url === "string" ? url : undefined,
+      publishedAt,
       likes: toNum(pick(item, LIKE_KEYS)),
       replies: toNum(pick(item, REPLY_KEYS)),
       shares: toNum(pick(item, SHARE_KEYS)),
