@@ -107,8 +107,11 @@ function isRelevant(p: Post, terms: string[], anchors?: Anchors): boolean {
   const t = p.text.toLowerCase();
   if (!anchors) return terms.some((term) => term && t.includes(term.toLowerCase()));
   const has = (x?: string) => !!x && t.includes(x.toLowerCase().replace(/^@/, ""));
-  if (has(anchors.handle) || anchors.keywords.some(has)) return true;
-  return has(anchors.project) && WEB3_CONTEXT.test(p.text);
+  // An explicit @mention of the handle is unambiguous; a keyword the customer chose is trusted.
+  if (anchors.handle && t.includes("@" + anchors.handle.toLowerCase().replace(/^@/, ""))) return true;
+  if (anchors.keywords.some(has)) return true;
+  // The bare handle or bare project name (e.g. an event that happens to share the name) also needs Web3 context.
+  return (has(anchors.handle) || has(anchors.project)) && WEB3_CONTEXT.test(p.text);
 }
 
 export function band(score: number): string {

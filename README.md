@@ -22,17 +22,39 @@ A growth-intelligence agent for Web3 projects, built for the **Celo "Agents on O
 
 ## Live proof
 
-> Filled in from the real paid run. Anything not listed here has not happened.
+All on Celo mainnet. Every hash below can be opened on [Celoscan](https://celoscan.io).
 
 | Item | Value |
 |---|---|
-| Live URL | _(set after deploy)_ |
-| ERC-8004 agent id / registration tx | _(set after registration)_ |
-| Agent wallet | `0x91a1F1d9CA6f8649A907Fd5EcCf886E46CbCEf32` |
-| Supplier purchases through buy (tx hashes) | _(from the paid run)_ |
-| Customer settlement tx(s) | _(from the paid run)_ |
+| Live service | https://growth-scout.onrender.com (`/health`, `/api/receipts`, `/.well-known/agent.json`) |
+| Agent wallet (payee, supplier payer, ERC-8004 owner) | `0x91a1F1d9CA6f8649A907Fd5EcCf886E46CbCEf32` |
+| ERC-8004 agent id | **10013** |
+| Registration tx (carries tag `celo_16de1003cce6`, verified on-chain) | `0x6c9ca84bfe73e9a759aabb35d56b9b65f0813ac67d1e747e78a0dac7397ab427` |
 
-The first customer report is a **developer-funded test** for GG Attention, a project the author also builds, so it is not counted as independent demand. See *Honest limits*.
+**Paid report 1** (first live run; led to the relevance fix described below)
+
+| Step | Tx |
+|---|---|
+| Customer paid $0.10 USDC via x402 (payer `0x0902…02D9`) | `0x56b5e1c8a7283930eee0edd9458aada72b4e953ea8c49dc75b427966320afd9d` |
+| Supplier: X search through buy | `0xdde12c6573a1b5e5d54099cc5bf6b79fb18fbaf74c4f0adc99c73a71e8437b11` |
+| Supplier: Reddit search through buy | `0x8083c667d99afe9cda0d7938d439532ecb8bf2112fb4124e019e1f6077e9705e` |
+| Supplier: YouTube search through buy | `0x2d064cc440d0bb4f2919b950fc5bc00920294abf633a54a6c7a20b3bef142a3f` |
+
+**Paid report 2** (after the relevance fix; 10 matching posts, 9 verified within 30 days, no unrelated viral post inflating reach)
+
+| Step | Tx |
+|---|---|
+| Customer paid $0.10 USDC via x402 (payer `0x0902…02D9`) | `0xc3ccf9fc389ad07c6dcc1aca9eb8ec0b8ea5db8c03674fc45de6e505eb93669f` |
+| Supplier: X search through buy | `0x232d36efcf50461f7947bf5a4f9b9d222dbd25ac6d597aeff2a4c7683aa946f9` |
+| Supplier: Reddit search through buy | `0xd8f3cbf725c7911dc17da61199fd8af4331d6c8a520508cdab698af9278e273c` |
+| Supplier: YouTube search through buy | `0x09de2e6210f7370150d7e793e37af24472a63e7e97c7197fd39beb250f81479f` |
+
+Each report cost the agent about $0.015 in data and sold for $0.10. Both reports were for GG Attention, a project the author also builds.
+
+**Disclosures.**
+- Both payments came from a wallet the author controls (`0x0902…02D9`). They are **developer-funded tests, not independent customers**.
+- Supplier amounts in `/api/receipts` are marked `amountsEstimatedFromCatalogue`: the ledger records buy's catalogue price ($0.005 each) because the quote line was not captured; the on-chain transactions are authoritative.
+- The first report counted three unrelated posts that reused the phrase "GG attention" (fan content, a pachinko promotion). That showed the matching was too loose for an ambiguous name, so when a handle or keywords are supplied, a post must now @mention the handle, use a chosen keyword, or pair the name with Web3 vocabulary, and X is searched by handle.
 
 ## How the report is made
 
