@@ -90,14 +90,25 @@ export interface AnalyzeInput {
   bySource: Partial<Record<Source, Post[]>>;
   mock: boolean;
   now?: Date;
+  /** set when the customer gave a handle or keywords: stricter matching for ambiguous names */
+  anchors?: Anchors;
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 const round = (n: number, d = 2) => Number(n.toFixed(d));
 
-function isRelevant(p: Post, terms: string[]): boolean {
+/** Everyday Web3 vocabulary: a bare project-name match that has none of it is probably about something else. */
+const WEB3_CONTEXT = /(web3|crypto|blockchain|on-?chain|token|defi|dapp|wallet|celo|ethereum|nft|\bdao\b|airdrop|stablecoin|creator|campaign|protocol|platform|\bbeta\b|\bxp\b|rewards?|marketplace|mainnet|testnet|builders?|community|\$[a-z]{2,6}\b)/i;
+
+/** When the customer supplies a handle or keywords, the name alone is not enough for an ambiguous brand. */
+export interface Anchors { project: string; handle?: string; keywords: string[] }
+
+function isRelevant(p: Post, terms: string[], anchors?: Anchors): boolean {
   const t = p.text.toLowerCase();
-  return terms.some((term) => term && t.includes(term.toLowerCase()));
+  if (!anchors) return terms.some((term) => term && t.includes(term.toLowerCase()));
+  const has = (x?: string) => !!x && t.includes(x.toLowerCase().replace(/^@/, ""));
+  if (has(anchors.handle) || anchors.keywords.some(has)) return true;
+  return has(anchors.project) && WEB3_CONTEXT.test(p.text);
 }
 
 export function band(score: number): string {
@@ -138,7 +149,7 @@ export function analyze(input: AnalyzeInput): GrowthReport {
     for (const key of keys) identities.set(key, post);
   }
   // Only distinct posts that mention the project are evidence. No fallback to unrelated results.
-  const pool = unique.filter((p) => isRelevant(p, input.terms));
+  const pool = unique.filter((p) => isRelevant(p, input.terms, input.anchors));
   const now = input.now ?? new Date();
   const recencyWindowDays = 30;
   const cutoff = now.getTime() - recencyWindowDays * 24 * 60 * 60 * 1000;
@@ -154,7 +165,7 @@ export function analyze(input: AnalyzeInput): GrowthReport {
   const confidence: "ok" | "low" = recentPool.length >= 3 ? "ok" : "low";
   const sources: SourceStats[] = queried.map((source) => {
     const posts = input.bySource[source] ?? [];
-    const rel = unique.filter((p) => p.source === source && isRelevant(p, input.terms));
+    const rel = unique.filter((p) => p.source === source && isRelevant(p, input.terms, input.anchors));
     return {
       source,
       fetched: true,

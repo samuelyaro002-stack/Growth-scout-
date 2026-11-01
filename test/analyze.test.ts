@@ -82,3 +82,17 @@ test("score bands", () => {
   assert.equal(band(80), "Strong momentum");
   assert.equal(band(10), "Low visibility");
 });
+
+test("ambiguous brand: with a handle supplied, unrelated uses of the bare name are not counted as evidence", () => {
+  const posts = [
+    mk({ text: "A full walkthrough of @GGAttention, the beta creator platform", author: "a" }),
+    mk({ text: "GG Attention is building in the right direction for the creator economy", author: "b" }),
+    mk({ text: "he was faking it to get his gg attention, filming drama", author: "c", likes: 1600 }),
+    mk({ text: "GG ATTENTION来店取材 抽選は店舗LINEから", author: "d" }),
+  ];
+  const strict = an({ project: "GG attention", terms: ["GG attention", "GGAttention"], tier: "pulse", bySource: { x: posts }, mock: false, anchors: { project: "GG attention", handle: "GGAttention", keywords: [] } });
+  assert.equal(strict.evidence.postsMatched, 2, "handle mention and web3-context mention only");
+  assert.ok(strict.metrics.totalEngagement < 1000, "the viral unrelated post must not inflate reach");
+  const loose = an({ project: "GG attention", terms: ["GG attention", "GGAttention"], tier: "pulse", bySource: { x: posts }, mock: false });
+  assert.equal(loose.evidence.postsMatched, 4, "without a handle the old behaviour is unchanged");
+});

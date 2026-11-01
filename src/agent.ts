@@ -91,7 +91,11 @@ export class GrowthAgent {
     for (const source of TIER_SOURCES[tier]) {
       let call: PaidCall;
       try {
-        call = await this.buy.search(source, req.project, spend);
+        // Search with the most specific thing the customer gave us (same price, better precision).
+        const query = source === "x" && req.handle ? req.handle
+          : source !== "x" && req.keywords[0] ? `${req.project} ${req.keywords[0]}`
+          : req.project;
+        call = await this.buy.search(source, query, spend);
       } catch (e) {
         warnings.push(`${source}: skipped (${(e as Error).message})`);
         if ((e as Error).name === "SpendCapError") break;
@@ -111,7 +115,8 @@ export class GrowthAgent {
     }
 
     const terms = [req.project, ...(req.handle ? [req.handle] : []), ...req.keywords];
-    const report = analyze({ project: req.project, terms, tier, bySource, mock: this.mock });
+    const anchors = req.handle || req.keywords.length ? { project: req.project, handle: req.handle, keywords: req.keywords } : undefined;
+    const report = analyze({ project: req.project, terms, tier, bySource, mock: this.mock, anchors });
 
     // Never sell a score built on nothing. Failing here means the x402 payment is not settled.
     if (report.evidence.postsMatched === 0) {
