@@ -10,7 +10,7 @@ export function buildRegistrationFile(cfg: Config) {
     type: "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
     name: "GrowthScout",
     description:
-      "Growth-intelligence agent for Web3 projects. Buys live X, Reddit and YouTube data through buy and sells Africa-focused growth reports per request over x402, paid in stablecoins on Celo.",
+      "Growth-intelligence agent for Web3 projects. Buys live X, Reddit and YouTube data through buy and sells worldwide growth reports per request over x402, paid in stablecoins on Celo.",
     services: [
       { name: "web", endpoint: cfg.publicUrl },
       { name: "x402-api", endpoint: `${cfg.publicUrl}/api` },

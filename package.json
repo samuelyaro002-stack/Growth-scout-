@@ -1,7 +1,7 @@
 {
   "name": "growth-scout",
   "version": "0.1.0",
-  "description": "GrowthScout: a growth-intelligence agent for Web3 projects. Buys social data with buy, sells Africa-focused growth reports over x402 on Celo.",
+  "description": "GrowthScout: a growth-intelligence agent for Web3 projects. Buys social data with buy, sells worldwide growth reports over x402 on Celo.",
   "type": "module",
   "private": true,
   "license": "Apache-2.0",

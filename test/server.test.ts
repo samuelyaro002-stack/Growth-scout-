@@ -64,7 +64,9 @@ test("paid route with MOCK data: valid request returns a labelled report and evi
   assert.equal(j.report.mock, true);
   assert.equal(j.report.sources.length, 3);
   assert.equal(j.evidence.builderCode, "celo_16de1003cce6");
-  assert.equal(j.evidence.supplierPurchases.length, 3);
+  assert.equal(j.evidence.supplierPurchases.length, 9, "3 searches + 1 handle profile + 2 voices + 3 reply pulls");
+  assert.ok(j.report.audience.comments > 0);
+  assert.ok(j.report.profile.followers >= 0);
 
   const pulse = (await (await post(`${base}/api/pulse`, { project: "Acme" })).json()) as any;
   assert.equal(pulse.report.sources.length, 1);
@@ -187,7 +189,7 @@ test("few matching posts: the report says LOW CONFIDENCE and never calls unrelat
   assert.equal(j.report.evidence.postsMatched, 2);
   assert.equal(j.report.evidence.recentPosts, 0, "undated posts are never counted as recent evidence");
   assert.match(j.report.summary, /LOW CONFIDENCE/);
-  assert.match(j.report.methodology, /does not measure where the audience actually lives/);
+  assert.match(j.report.methodology, /do not measure where the audience actually lives/);
 });
 
 test("cache hit: the second response bought nothing and must not reuse the first one's purchase evidence", async () => {

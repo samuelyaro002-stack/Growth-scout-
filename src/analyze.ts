@@ -1,14 +1,54 @@
-import { canonicalPostUrl, engagement, type Post, type Source } from "./sources.js";
+import { canonicalPostUrl, engagement, type Post, type Profile, type Source } from "./sources.js";
 
 /** Deterministic analysis: no LLM, so the same paid data always yields the same report. */
 
-const AFRICA_TERMS = [
-  "africa", "african", "africans", "naija", "nigeria", "nigerian", "nigerians", "lagos", "abuja", "kaduna", "kano", "ibadan",
-  "kenya", "kenyan", "nairobi", "ghana", "ghanaian", "accra", "south africa", "johannesburg", "cape town", "egypt", "cairo",
-  "ethiopia", "uganda", "kampala", "tanzania", "rwanda", "kigali", "senegal", "morocco", "naira", "cngn", "ngn", "cedi",
-  "m-pesa", "mpesa", "ussd",
-];
-const AFRICA_RE = new RegExp(`(?<![a-z0-9])(?:${AFRICA_TERMS.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})(?![a-z0-9])`, "i");
+export const REGION_TERMS: Record<string, string[]> = {
+  "Africa": [
+    "africa", "african", "africans", "naija", "nigeria", "nigerian", "nigerians", "lagos", "abuja", "kaduna", "kano", "ibadan",
+    "kenya", "kenyan", "nairobi", "ghana", "ghanaian", "accra", "south africa", "johannesburg", "cape town", "egypt", "cairo",
+    "ethiopia", "uganda", "kampala", "tanzania", "rwanda", "kigali", "senegal", "morocco", "naira", "cngn", "ngn", "cedi",
+    "m-pesa", "mpesa", "ussd",
+  ],
+  "Europe": [
+    "europe", "european", "eu", "uk", "united kingdom", "london", "germany", "german", "berlin", "france", "paris", "spain", "madrid",
+    "barcelona", "italy", "milan", "netherlands", "amsterdam", "portugal", "lisbon", "switzerland", "zurich", "poland", "warsaw",
+    "ukraine", "kyiv", "sweden", "stockholm", "ireland", "dublin", "euro", "eur", "gbp",
+  ],
+  "North America": [
+    "usa", "united states", "american", "new york", "nyc", "san francisco", "los angeles", "austin", "miami", "texas", "california",
+    "canada", "canadian", "toronto", "vancouver", "usd",
+  ],
+  "Latin America": [
+    "latam", "latin america", "brazil", "brazilian", "brasil", "sao paulo", "rio de janeiro", "mexico", "mexican", "argentina",
+    "buenos aires", "colombia", "bogota", "chile", "santiago", "peru", "lima", "venezuela", "pix", "brl", "ars",
+  ],
+  "Asia": [
+    "asia", "asian", "india", "indian", "mumbai", "bangalore", "delhi", "singapore", "japan", "japanese", "tokyo", "korea", "korean",
+    "seoul", "china", "chinese", "hong kong", "vietnam", "hanoi", "ho chi minh", "thailand", "bangkok", "indonesia", "jakarta",
+    "philippines", "manila", "pakistan", "karachi", "bangladesh", "dhaka", "taiwan", "taipei", "inr", "upi",
+  ],
+  "Middle East": [
+    "middle east", "uae", "dubai", "abu dhabi", "saudi", "riyadh", "qatar", "doha", "israel", "tel aviv", "istanbul", "tehran",
+    "bahrain", "kuwait", "oman",
+  ],
+  "Oceania": ["australia", "australian", "sydney", "melbourne", "new zealand", "auckland", "oceania"],
+};
+export const REGION_NAMES = Object.keys(REGION_TERMS);
+const REGION_RES: [string, RegExp][] = Object.entries(REGION_TERMS).map(([region, terms]) => [
+  region,
+  new RegExp(`(?<![a-z0-9])(?:${terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})(?![a-z0-9])`, "i"),
+]);
+/** Regions mentioned in a piece of text (place names, cities, local currencies). Not where the writer lives. */
+export function regionsIn(text: string): string[] {
+  return REGION_RES.filter(([, re]) => re.test(text)).map(([region]) => region);
+}
+/** Match a free-form focus request ("africa", "LATAM", "north america") to a region name. */
+export function matchRegion(input: string | undefined): string | undefined {
+  if (!input) return undefined;
+  const k = input.trim().toLowerCase();
+  return REGION_NAMES.find((r) => r.toLowerCase() === k) ??
+    (k === "latam" ? "Latin America" : k === "na" || k === "usa" ? "North America" : k === "mena" ? "Middle East" : undefined);
+}
 
 const POSITIVE = ["great", "love", "amazing", "bullish", "awesome", "good", "excellent", "best", "fast", "smooth", "gem", "promising", "solid", "impressive", "growth", "happy", "easy", "useful", "improved", "recommend"];
 const NEGATIVE = ["scam", "rug", "rugged", "fraud", "fake", "bad", "terrible", "worst", "slow", "broken", "bug", "bugs", "hack", "hacked", "exploit", "dead", "bearish", "shill", "spam", "stuck", "delay", "delayed", "fud", "suspicious", "lost"];
@@ -28,6 +68,17 @@ export interface Recommendation {
   evidenceStatus: "limited" | "recent_sample" | "well_supported";
 }
 type RecommendationDraft = Omit<Recommendation, "evidenceStatus"> & { requiresStrongEvidence?: boolean };
+
+export interface RegionStat { region: string; posts: number; share: number; topAuthors: string[] }
+export interface Voice { handle: string; followers?: number; location?: string; region?: string }
+export interface Audience {
+  comments: number;
+  sources: Source[];
+  positive: number;
+  negative: number;
+  net: number;
+  regions: { region: string; count: number }[];
+}
 
 export interface SourceStats {
   source: Source;
@@ -73,7 +124,17 @@ export interface GrowthReport {
     topAuthorShare: number;
   };
   sentiment: { positive: number; negative: number; net: number; riskFlags: number };
-  africa: { posts: number; share: number; topAuthors: string[] };
+  /** Regions whose places or currencies the matching posts mention, most-mentioned first. */
+  regions: RegionStat[];
+  regionsCovered: number;
+  /** Optional lens chosen by the customer (e.g. Africa, Latin America). */
+  focus?: RegionStat & { requested: string };
+  /** Profile of the project's own X account, when bought. */
+  profile?: Profile;
+  /** Top voices in the conversation whose profiles were bought. */
+  voices?: Voice[];
+  /** Replies bought on the busiest matching posts. Reported separately; does not change the score. */
+  audience?: Audience;
   topTerms: string[];
   topPosts: { source: Source; text: string; author?: string; url?: string; engagement: number }[];
   recommendations: Recommendation[];
@@ -92,6 +153,12 @@ export interface AnalyzeInput {
   now?: Date;
   /** set when the customer gave a handle or keywords: stricter matching for ambiguous names */
   anchors?: Anchors;
+  /** Region the customer wants highlighted (any of REGION_NAMES). */
+  focusRegion?: string;
+  profile?: Profile;
+  voices?: Voice[];
+  /** Replies from follow-up purchases; kept out of the post pool and the score. */
+  audience?: (Post & { place?: string })[];
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
@@ -103,7 +170,7 @@ const WEB3_CONTEXT = /(web3|crypto|blockchain|on-?chain|token|defi|dapp|wallet|c
 /** When the customer supplies a handle or keywords, the name alone is not enough for an ambiguous brand. */
 export interface Anchors { project: string; handle?: string; keywords: string[] }
 
-function isRelevant(p: Post, terms: string[], anchors?: Anchors): boolean {
+export function isRelevant(p: Post, terms: string[], anchors?: Anchors): boolean {
   const t = p.text.toLowerCase();
   if (!anchors) return terms.some((term) => term && t.includes(term.toLowerCase()));
   const has = (x?: string) => !!x && t.includes(x.toLowerCase().replace(/^@/, ""));
@@ -203,12 +270,45 @@ export function analyze(input: AnalyzeInput): GrowthReport {
   }
   const net = pos + neg === 0 ? 0 : (pos - neg) / (pos + neg);
 
-  // africa
-  const africaPosts = pool.filter((p) => AFRICA_RE.test(p.text));
-  const africaShare = pool.length ? africaPosts.length / pool.length : 0;
-  const africaAuthorCounts = new Map<string, number>();
-  for (const p of africaPosts) if (p.author) africaAuthorCounts.set(p.author, (africaAuthorCounts.get(p.author) ?? 0) + 1);
-  const africaAuthors = [...africaAuthorCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([a]) => a);
+  // regions: which places and currencies the matching posts mention
+  const regionStatsFor = (posts: Post[]): RegionStat[] => {
+    const byRegion = new Map<string, Post[]>();
+    for (const p of posts) for (const r of regionsIn(p.text)) byRegion.set(r, [...(byRegion.get(r) ?? []), p]);
+    return [...byRegion.entries()].map(([region, ps]) => {
+      const counts = new Map<string, number>();
+      for (const p of ps) if (p.author) counts.set(p.author, (counts.get(p.author) ?? 0) + 1);
+      return {
+        region, posts: ps.length, share: posts.length ? ps.length / posts.length : 0,
+        topAuthors: [...counts.entries()].sort((x, y) => y[1] - x[1]).slice(0, 5).map(([a]) => a),
+      };
+    }).sort((x, y) => y.posts - x.posts);
+  };
+  const regionStats = regionStatsFor(pool);
+  const focusName = matchRegion(input.focusRegion);
+  const focusStat = (stats: RegionStat[]): RegionStat | undefined =>
+    focusName ? stats.find((r) => r.region === focusName) ?? { region: focusName, posts: 0, share: 0, topAuthors: [] } : undefined;
+  const voices = input.voices?.map((v) => ({ ...v, region: v.region ?? (v.location ? regionsIn(v.location)[0] : undefined) }));
+  const audienceRegionCounts = new Map<string, number>();
+  for (const c of input.audience ?? []) for (const r of regionsIn(c.place ?? "")) audienceRegionCounts.set(r, (audienceRegionCounts.get(r) ?? 0) + 1);
+  const allRegions = new Set<string>([
+    ...regionStats.map((r) => r.region), ...audienceRegionCounts.keys(),
+    ...(voices ?? []).flatMap((v) => (v.region ? [v.region] : [])),
+    ...(input.profile?.location ? regionsIn(input.profile.location) : []),
+  ]);
+  let audience: Audience | undefined;
+  if (input.audience?.length) {
+    let ap = 0, an = 0;
+    for (const c of input.audience) for (const w of tokenize(c.text)) {
+      if (POSITIVE.includes(w)) ap++;
+      if (NEGATIVE.includes(w)) an++;
+    }
+    audience = {
+      comments: input.audience.length,
+      sources: [...new Set(input.audience.map((c) => c.source))],
+      positive: ap, negative: an, net: round(ap + an === 0 ? 0 : (ap - an) / (ap + an)),
+      regions: [...audienceRegionCounts.entries()].sort((x, y) => y[1] - x[1]).map(([region, count]) => ({ region, count })),
+    };
+  }
 
   // terms
   const projectTokens = new Set(input.terms.flatMap(tokenize));
@@ -224,14 +324,15 @@ export function analyze(input: AnalyzeInput): GrowthReport {
     .slice(0, 5)
     .map((p) => ({ source: p.source, text: p.text.slice(0, 200), author: p.author, url: p.url, engagement: engagement(p) }));
 
-  // score (0-100): reach 25, breadth 25, sentiment 25, africa 15, voice diversity 10
+  // score (0-100): reach 25, breadth 25, sentiment 25, geographic spread 15, voice diversity 10
   const reach = clamp(Math.log10(1 + totalViews / 20 + totalEngagement * 4) * 6, 0, 25);
   const activeSources = sources.filter((s) => s.relevant >= 3).length;
   const breadth = queried.length ? 25 * (activeSources / queried.length) : 0;
   const sentimentScore = 12.5 + 12.5 * net;
-  const africaScore = clamp(africaShare * 60, 0, 15);
+  // Spread: distinct regions evidenced anywhere in the bought data; three or more earns the full 15.
+  const geoScore = clamp(allRegions.size / 3, 0, 1) * 15;
   const diversity = pool.length >= 3 ? 10 * (1 - topAuthorShare) : 0;
-  const score = Math.round(clamp(reach + breadth + sentimentScore + africaScore + diversity, 0, 100));
+  const score = Math.round(clamp(reach + breadth + sentimentScore + geoScore + diversity, 0, 100));
 
   // Recommendations use only matching posts with verified publication dates.
   // The score still describes the complete fetched snapshot, with freshness disclosed below.
@@ -242,14 +343,9 @@ export function analyze(input: AnalyzeInput): GrowthReport {
     if (RISK.has(w)) recentRisk++;
   }
   const recentNet = recentPos + recentNeg === 0 ? 0 : (recentPos - recentNeg) / (recentPos + recentNeg);
-  const recentAfricaPosts = recentPool.filter(p => AFRICA_RE.test(p.text));
-  const recentAfricaShare = recentPool.length ? recentAfricaPosts.length / recentPool.length : 0;
-  const recentAfricaAuthors = new Map<string, number>();
-  for (const p of recentAfricaPosts) if (p.author) {
-    recentAfricaAuthors.set(p.author, (recentAfricaAuthors.get(p.author) ?? 0) + 1);
-  }
-  const recentTopAuthors = [...recentAfricaAuthors.entries()].sort((a, b) => b[1] - a[1])
-    .slice(0, 5).map(([author]) => author);
+  const recentRegionStats = regionStatsFor(recentPool);
+  const recentFocus = focusStat(recentRegionStats);
+  const recentGeoTagged = recentPool.filter((p) => regionsIn(p.text).length > 0).length;
   const recentAuthorCounts = new Map<string, number>();
   for (const p of recentPool) if (p.author) {
     const author = p.author.toLowerCase();
@@ -276,21 +372,39 @@ export function analyze(input: AnalyzeInput): GrowthReport {
       action: "Gather a timestamped sample before making a growth decision.",
     });
   }
-  if (recentPool.length > 0 && recentAfricaShare < 0.1) {
+  if (recentFocus && recentPool.length > 0 && recentFocus.share < 0.1) {
     recs.push({
       priority: "high",
-      title: "Africa is barely part of the conversation",
-      why: `Only ${Math.round(recentAfricaShare * 100)}% of recent matching posts reference an African market, city or local-currency rail.`,
-      action: "Run a Nigeria-first activation: three city meetups (Lagos, Abuja, Kaduna), a local-language X Space, and one incentive campaign priced in naira or a local-currency stablecoin. Recruit 10 micro-creators from active African Web3 communities before spending on ads.",
+      title: `${recentFocus.region} is barely part of the conversation`,
+      why: `Only ${Math.round(recentFocus.share * 100)}% of recent matching posts reference ${recentFocus.region} places, cities or local-currency rails.`,
+      action: `Run a ${recentFocus.region}-first activation: two or three city meetups, a local-language X Space, and one incentive campaign priced in a local currency or stablecoin. Recruit 10 micro-creators from active ${recentFocus.region} Web3 communities before spending on ads.`,
       requiresStrongEvidence: true,
     });
-  } else if (recentPool.length > 0 && recentAfricaShare < 0.3) {
+  } else if (recentFocus && recentPool.length > 0 && recentFocus.share < 0.3) {
     recs.push({
       priority: "medium",
-      title: "African pockets exist, so convert them into a community",
-      why: `${Math.round(recentAfricaShare * 100)}% of recent matching posts reference Africa.${recentTopAuthors.length ? ` Most active voices: ${recentTopAuthors.slice(0, 3).map((a) => "@" + a).join(", ")}.` : ""}`,
-      action: "DM the active African voices with an ambassador or bounty offer, then give them a shared channel and weekly tasks. Retention beats new reach at this stage.",
+      title: `${recentFocus.region} pockets exist, so convert them into a community`,
+      why: `${Math.round(recentFocus.share * 100)}% of recent matching posts reference ${recentFocus.region}.${recentFocus.topAuthors.length ? ` Most active voices: ${recentFocus.topAuthors.slice(0, 3).map((a) => "@" + a).join(", ")}.` : ""}`,
+      action: "DM the active voices with an ambassador or bounty offer, then give them a shared channel and weekly tasks. Retention beats new reach at this stage.",
       requiresStrongEvidence: true,
+    });
+  }
+  const topRecentRegion = recentRegionStats[0];
+  if (recentGeoTagged >= 3 && topRecentRegion && topRecentRegion.posts / recentGeoTagged > 0.7 && !recentFocus) {
+    recs.push({
+      priority: "medium",
+      title: `The conversation is concentrated in ${topRecentRegion.region}`,
+      why: `${topRecentRegion.posts} of ${recentGeoTagged} recent posts that mention a place reference ${topRecentRegion.region}.`,
+      action: "Pick one adjacent market where users already show up in small numbers and run a single localised test (language, payment rail, local community partner) before spreading effort across many regions.",
+      requiresStrongEvidence: true,
+    });
+  }
+  if (audience && audience.comments >= 5 && audience.net < -0.2) {
+    recs.push({
+      priority: "high",
+      title: "Replies to your busiest posts skew negative",
+      why: `Across ${audience.comments} bought replies, net sentiment is ${audience.net} (${audience.negative} negative vs ${audience.positive} positive keyword hits).`,
+      action: "Read the top five replies, answer the repeated complaint publicly and pin the fix. Replies are where buyers decide.",
     });
   }
   if (recentPool.length >= 3 && recentTopAuthorShare > 0.4) {
@@ -391,7 +505,7 @@ export function analyze(input: AnalyzeInput): GrowthReport {
   const duplicateNote = duplicatesExcluded
     ? ` Excluded ${duplicatesExcluded} duplicate provider result(s) (${duplicateSameSource} same-source, ${duplicateCrossSource} cross-source).`
     : "";
-  const summary = `${input.project} scores ${score}/100 (${band(score)}). Across ${queried.length} source(s), ${pool.length} distinct post(s) mention the project from ${all.length} returned result(s), with ${totalEngagement} total engagement; ${Math.round(africaShare * 100)}% of them mention Africa-related places or currencies and net sentiment is ${round(net)}. ${recentBasis}${duplicateNote}${lowNote}`;
+  const summary = `${input.project} scores ${score}/100 (${band(score)}). Across ${queried.length} source(s), ${pool.length} distinct post(s) mention the project from ${all.length} returned result(s), with ${totalEngagement} total engagement; ${regionStats.length ? `the places they mention span ${allRegions.size} region(s), led by ${regionStats[0]!.region}` : "few mention a place or currency, so geography is unclear"}; net sentiment is ${round(net)}. ${recentBasis}${duplicateNote}${lowNote}`;
 
   return {
     project: input.project,
@@ -421,7 +535,12 @@ export function analyze(input: AnalyzeInput): GrowthReport {
       topAuthorShare: round(topAuthorShare),
     },
     sentiment: { positive: pos, negative: neg, net: round(net), riskFlags: risk },
-    africa: { posts: africaPosts.length, share: round(africaShare), topAuthors: africaAuthors },
+    regions: regionStats.map((r) => ({ ...r, share: round(r.share) })),
+    regionsCovered: allRegions.size,
+    ...(focusStat(regionStats) && input.focusRegion ? { focus: { ...focusStat(regionStats)!, share: round(focusStat(regionStats)!.share), requested: input.focusRegion } } : {}),
+    ...(input.profile ? { profile: input.profile } : {}),
+    ...(voices?.length ? { voices } : {}),
+    ...(audience ? { audience } : {}),
     topTerms,
     topPosts,
     recommendations: finalRecommendations.slice(0, 6),
@@ -429,10 +548,10 @@ export function analyze(input: AnalyzeInput): GrowthReport {
       reach: round(reach, 1),
       breadth: round(breadth, 1),
       sentiment: round(sentimentScore, 1),
-      africa: round(africaScore, 1),
+      geographicSpread: round(geoScore, 1),
       voiceDiversity: round(diversity, 1),
     },
     methodology:
-      "Posts are bought live per request from X, Reddit and YouTube through the buy gateway. Repeated provider IDs are matched only within their source; canonical post URLs can deduplicate matching source permalinks across sources, while distinct platform URLs and cross-platform ID collisions remain separate. Duplicate counts are reported in evidence. Confidence and recommendations use distinct matching posts with verifiable publication dates within the last 30 days; missing or historical dates do not count as recent. The score and descriptive metrics still include all distinct matching results, so read them as a historical snapshot when confidence is low. High-impact or paid-growth recommendations are shown only with at least six recent matching posts across at least two sources, and remain pilots rather than causal proof. Africa share = the share of those posts that mention African countries, cities or local-currency terms; it does not measure where the audience actually lives. Engagement = likes + 2×replies + 3×shares. Sentiment is a keyword lexicon, so treat it as a directional signal, not a verdict. Score = reach 25 + source breadth 25 + sentiment 25 + Africa share 15 + voice diversity 10.",
+      "Posts are bought live per request from X, Reddit and YouTube through the buy gateway; audits also buy the project's X profile, top voices' profiles and replies on the busiest matching posts. Repeated provider IDs are matched only within their source; canonical post URLs can deduplicate matching source permalinks across sources, while distinct platform URLs and cross-platform ID collisions remain separate. Duplicate counts are reported in evidence. Confidence and recommendations use distinct matching posts with verifiable publication dates within the last 30 days; missing or historical dates do not count as recent. The score and descriptive metrics still include all distinct matching results, so read them as a historical snapshot when confidence is low. High-impact or paid-growth recommendations are shown only with at least six recent matching posts across at least two sources, and remain pilots rather than causal proof. Regions are counted from places, cities and local-currency terms that the matching posts (and any bought profile locations) mention, across Africa, Europe, North America, Latin America, Asia, the Middle East and Oceania; they do not measure where the audience actually lives. An optional focus region highlights one of them. Replies are summarised separately and do not change the score. Engagement = likes + 2×replies + 3×shares. Sentiment is a keyword lexicon, so treat it as a directional signal, not a verdict. Score = reach 25 + source breadth 25 + sentiment 25 + geographic spread 15 (distinct regions evidenced, full marks at three) + voice diversity 10.",
   };
 }

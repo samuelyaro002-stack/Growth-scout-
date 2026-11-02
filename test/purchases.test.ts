@@ -226,7 +226,12 @@ test("x402 pulse and audit use the shared buyer, while unpaid/invalid/failed rep
     const response = await post(path, { project: "Acme" }, signature);
     assert.equal(response.status, 200, await response.clone().text());
     const report: any = await response.json();
-    assert.equal(report.evidence.supplierPurchases.length, path === "/api/pulse" ? 1 : 3);
+    if (path === "/api/pulse") assert.equal(report.evidence.supplierPurchases.length, 1);
+    else {
+      // 3 searches, then follow-ups on what they found (profiles of top voices, replies on the busiest posts).
+      assert.ok(report.evidence.supplierPurchases.length > 3 && report.evidence.supplierPurchases.length <= 9);
+      assert.deepEqual(report.evidence.supplierPurchases.slice(0, 3).map((c: any) => c.kind), ["search:x", "search:reddit", "search:youtube"]);
+    }
     assert.equal(report.evidence.supplierPurchases[0].tx, tx);
     const before = settlements;
     const invalid = await post(path, { project: "" }, signature);

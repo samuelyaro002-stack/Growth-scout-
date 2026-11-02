@@ -50,7 +50,7 @@ export function mockResponse(source: Source, query: string): unknown {
     const pop = Math.floor(rand() * rand() * 400);
     if (source === "x") {
       return {
-        id: `x${i}`,
+        id: String(1000 + i),
         text,
         author: { username: author },
         likeCount: pop,
@@ -74,7 +74,7 @@ export function mockResponse(source: Source, query: string): unknown {
       };
     }
     return {
-      videoId: `y${i}`,
+      videoId: `vid${String(i).padStart(8, "0")}`,
       title: text,
       channelTitle: author,
       viewCount: pop * 90,
@@ -84,4 +84,28 @@ export function mockResponse(source: Source, query: string): unknown {
     };
   });
   return { data: rows };
+}
+
+const MOCK_PLACES = ["Lagos, Nigeria", "London, UK", "Sao Paulo, Brazil", "Singapore", "Austin, TX", "Berlin, Germany", "Mumbai, India", "Dubai, UAE"];
+
+/** Fixture for follow-up purchases (profile / comments), in a plausible but unofficial shape. */
+export function mockFollowup(kind: string, value: string): unknown {
+  const rand = seeded(`${kind}:${value.toLowerCase()}`);
+  if (kind === "x_about") {
+    return { data: { user: {
+      screen_name: value, name: value,
+      location: MOCK_PLACES[Math.floor(rand() * MOCK_PLACES.length)],
+      followers_count: Math.floor(rand() * 40000), friends_count: Math.floor(rand() * 900),
+      description: "Fixture profile", verified: false,
+    } } };
+  }
+  const n = 6 + Math.floor(rand() * 6);
+  const dayStart = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
+  const texts = ["love this, easy to use", "great update, fast and smooth", "still stuck on my transfer, support is slow",
+    "amazing work, bullish", "is this a scam? nothing arrived", "solid product, recommend it", "bug on mobile after the update"];
+  return { data: { comments: Array.from({ length: n }, (_, i) => ({
+    id: `c${i}`, text: texts[Math.floor(rand() * texts.length)],
+    user: { username: `fan_${Math.floor(rand() * 50)}`, location: MOCK_PLACES[Math.floor(rand() * MOCK_PLACES.length)] },
+    like_count: Math.floor(rand() * 30), created_at: new Date(dayStart - i * 3600 * 1000).toISOString(),
+  })) } };
 }

@@ -191,3 +191,71 @@ export function normalizeItems(source: Source, body: unknown): Post[] {
 }
 
 export const engagement = (p: Post): number => p.likes + 2 * p.replies + 3 * p.shares;
+
+export interface Profile {
+  followers?: number;
+  following?: number;
+  location?: string;
+  verified?: boolean;
+}
+
+/** Depth-limited key search: first value for any of `keys` anywhere in the document. */
+function deepFind(v: unknown, keys: string[], depth = 0): unknown {
+  if (depth > 6 || v === null || typeof v !== "object") return undefined;
+  if (!Array.isArray(v)) {
+    for (const k of keys) {
+      const val = (v as Obj)[k];
+      if (val !== undefined && val !== null && val !== "" && typeof val !== "object") return val;
+    }
+  }
+  for (const child of Array.isArray(v) ? v : Object.values(v as Obj)) {
+    const found = deepFind(child, keys, depth + 1);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+/** Defensive parse of a user-about response. Returns undefined when nothing readable was found. */
+export function parseProfile(body: unknown): Profile | undefined {
+  const followers = deepFind(body, ["followers_count", "followers", "followersCount", "normal_followers_count"]);
+  const following = deepFind(body, ["friends_count", "following", "following_count", "followingCount"]);
+  const location = deepFind(body, ["location", "account_based_in", "country", "profile_location"]);
+  const verified = deepFind(body, ["verified", "is_blue_verified", "blue_verified"]);
+  const profile: Profile = {
+    followers: followers === undefined ? undefined : toNum(followers),
+    following: following === undefined ? undefined : toNum(following),
+    location: typeof location === "string" ? location.slice(0, 80) : undefined,
+    verified: typeof verified === "boolean" ? verified : undefined,
+  };
+  return Object.values(profile).some((x) => x !== undefined) ? profile : undefined;
+}
+
+/** Comments: same defensive item reader. A comment's own location (if present) rides along as `place`. */
+export function normalizeComments(source: Source, body: unknown): (Post & { place?: string })[] {
+  const items = extractItems(body);
+  const posts = normalizeItems(source, body);
+  // normalizeItems drops empty texts, so re-align by walking items with non-empty text.
+  const withText = items.filter((it) => toText(pick(it, TEXT_KEYS)).trim() || (source === "reddit" && (toText(it["title"]) || toText(it["selftext"]))));
+  return posts.map((post, i) => {
+    const place = withText[i] ? deepFind(withText[i], ["location", "account_based_in"]) : undefined;
+    return typeof place === "string" ? { ...post, place: place.slice(0, 80) } : post;
+  });
+}
+
+/** Key paths (never values) of a response, for tuning parsers without storing third-party content. */
+export function keyPaths(body: unknown, max = 40): string[] {
+  const out = new Set<string>();
+  const walk = (v: unknown, path: string, depth: number) => {
+    if (out.size >= max || depth > 5 || v === null) return;
+    if (Array.isArray(v)) { if (v.length) walk(v[0], path + "[]", depth + 1); return; }
+    if (typeof v === "object") {
+      for (const [k, val] of Object.entries(v as Obj)) {
+        const p = path ? `${path}.${k}` : k;
+        if (typeof val === "object" && val !== null) walk(val, p, depth + 1); else out.add(`${p}:${typeof val}`);
+        if (out.size >= max) return;
+      }
+    }
+  };
+  walk(body, "", 0);
+  return [...out];
+}

@@ -18,6 +18,7 @@ import {
   setDailySpendCap,
 } from '@celo/buy-keystore';
 import { privateKeyToAccount } from 'viem/accounts';
+import { validateInvocation, validatePolicy } from './invocation-policy.mjs';
 
 const require = createRequire(import.meta.url);
 // Wallet apps (MetaMask) export the key without the 0x prefix; accept both.
@@ -82,14 +83,7 @@ async function main() {
     if (process.env.REPORT_PURCHASES_ENABLED !== '1') fail('Report purchases are disabled.');
     try { policy = JSON.parse(process.env.GROWTHSCOUT_BUY_POLICY || 'null'); }
     catch { fail('Invalid report purchase policy.'); }
-    if (!policy || !Array.isArray(policy.sources) || !policy.sources.length ||
-        policy.sources.some(s => !['x', 'reddit', 'youtube'].includes(s)) ||
-        !Number.isFinite(policy.dailyCapUsd) || policy.dailyCapUsd <= 0 || policy.dailyCapUsd > 1000 ||
-        !policy.maxCallUsd || ['x', 'reddit', 'youtube'].some(s =>
-          !Number.isFinite(policy.maxCallUsd[s]) || policy.maxCallUsd[s] < 0 ||
-          policy.maxCallUsd[s] > 1000)) {
-      fail('Invalid report purchase policy.');
-    }
+    if (!validatePolicy(policy)) fail('Invalid report purchase policy.');
   }
   const allowed = ['--setup', '--check-signer', 'whoami', 'quote', 'curl'];
   // Existing probe passes --verbose before curl. Accept only the intended commands.
@@ -102,33 +96,9 @@ async function main() {
   if (command === 'curl') {
     if (!reportMode) fail('Standalone paid probes are disabled; use the shared report budget.');
     const invocation = args[0] === '--verbose' ? args.slice(1) : args;
-    const amount = Number(invocation[2]);
-    const endpoints = {
-      x: 'https://gateway.usebuy.ai/v1/social/x/posts/search',
-      reddit: 'https://gateway.usebuy.ai/v1/social/reddit/posts/search',
-      youtube: 'https://gateway.usebuy.ai/v1/social/youtube/videos/search',
-    };
-    const source = Object.keys(endpoints).find(s => endpoints[s] === invocation[9]);
-    const limit = reportMode && source ? policy.maxCallUsd[source] : 0.0075;
-    // Exact argv allowlist prevents aliases, duplicate/equals-form caps, redirects,
-    // output-file flags or additional requests from weakening the probe restriction.
-    if (invocation.length !== 10 ||
-        invocation[0] !== 'curl' || invocation[1] !== '--max-amount' ||
-        !Number.isFinite(amount) || amount <= 0 || amount > limit ||
-        invocation[3] !== '-X' || invocation[4] !== 'POST' ||
-        invocation[5] !== '-H' || invocation[6] !== 'Content-Type: application/json' ||
-        invocation[7] !== '--data' ||
-        !source || (reportMode ? !policy.sources.includes(source) : source !== 'x')) {
-      fail('Only the capped USDC X-search probe invocation is permitted.');
-    }
-    let body;
-    try { body = JSON.parse(invocation[8]); } catch { fail('Probe body must be JSON.'); }
-    if (!body || typeof body !== 'object' || Array.isArray(body) ||
-        Object.keys(body).length !== 1 ||
-        (reportMode ? typeof body.query !== 'string' || !body.query.trim() ||
-          body.query.length > 256 || /[\u0000-\u001f]/.test(body.query) : body.query !== 'Celo')) {
-      fail('Only the authorized Celo search probe is permitted.');
-    }
+    // Exact argv + endpoint + body allowlist (see invocation-policy.mjs).
+    try { validateInvocation(invocation, policy); }
+    catch (e) { fail(e.message); }
     // Validate key shape before making any network request; never print the key.
     const key = process.env.AGENT_PRIVATE_KEY;
     if (!key || !isPrivateKey(key)) fail('AGENT_PRIVATE_KEY must be a valid 0x-prefixed private key.');

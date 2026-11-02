@@ -39,16 +39,46 @@ test("no data at all yields a high-priority visibility recommendation, not a cra
   assert.equal(r.recommendations[0].evidenceStatus, "limited", "no data must never produce an actionable growth plan");
 });
 
-test("Africa detection matches real markets and ignores look-alike substrings", () => {
+test("region detection matches real markets across the world and ignores look-alike substrings", () => {
   const posts = [
     mk({ text: "Acme is huge in Lagos right now", author: "a" }),
     mk({ text: "Acme paid out in naira instantly", author: "b" }),
     mk({ text: "Acme makes snakes and ladders fun", author: "c" }),
     mk({ text: "Acme explained for devs", author: "d" }),
+    mk({ text: "Acme meetup in London next week", author: "e" }),
+    mk({ text: "Acme is big in Sao Paulo with Pix", author: "f" }),
   ];
   const r = an({ project: "Acme", terms: ["Acme"], tier: "pulse", bySource: { x: posts }, mock: false });
-  assert.equal(r.africa.posts, 2);
-  assert.equal(r.africa.share, 0.5);
+  const stat = (name: string) => r.regions.find((x) => x.region === name);
+  assert.equal(stat("Africa")?.posts, 2);
+  assert.equal(stat("Africa")?.share, 0.33);
+  assert.equal(stat("Europe")?.posts, 1);
+  assert.equal(stat("Latin America")?.posts, 1);
+  assert.equal(r.regionsCovered, 3);
+  assert.equal(r.focus, undefined);
+  const f = an({ project: "Acme", terms: ["Acme"], tier: "pulse", bySource: { x: posts }, mock: false, focusRegion: "latam" });
+  assert.equal(f.focus?.region, "Latin America");
+  assert.equal(f.focus?.posts, 1);
+});
+
+test("a bought profile, voices and replies add geography and an audience read without changing the post pool", () => {
+  const posts = [mk({ text: "Acme is great", author: "a" })];
+  const base = an({ project: "Acme", terms: ["Acme"], tier: "audit", bySource: { x: posts }, mock: false });
+  const r = an({
+    project: "Acme", terms: ["Acme"], tier: "audit", bySource: { x: posts }, mock: false,
+    profile: { followers: 1200, location: "Berlin, Germany" },
+    voices: [{ handle: "kofi", location: "Accra, Ghana" }],
+    audience: [
+      { ...mk({ text: "love it, smooth", author: "u1" }), place: "Mumbai, India" },
+      { ...mk({ text: "this is a scam", author: "u2" }), place: "" },
+    ],
+  });
+  assert.equal(r.evidence.postsMatched, base.evidence.postsMatched);
+  assert.equal(r.audience?.comments, 2);
+  assert.deepEqual(r.audience?.regions, [{ region: "Asia", count: 1 }]);
+  assert.equal(r.voices?.[0]?.region, "Africa");
+  assert.equal(r.regionsCovered, 3);
+  assert.ok(r.score >= base.score);
 });
 
 test("scam talk lowers sentiment and triggers the trust recommendation", () => {

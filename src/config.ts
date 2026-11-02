@@ -60,10 +60,11 @@ export function loadConfig() {
       reddit: num("BUY_MAX_REDDIT_USD", 0.0075),
       youtube: num("BUY_MAX_YOUTUBE_USD", 0.0075),
     },
+    buyMaxFollowupUsd: num("BUY_MAX_FOLLOWUP_USD", 0.0075),
     // Live buying is OFF until you set REPORT_PURCHASES_ENABLED=1.
     reportPurchasesEnabled: flag("REPORT_PURCHASES_ENABLED"),
-    maxSpendPerRequestUsd: num("MAX_SPEND_PER_REQUEST_USD", 0.0225),
-    dailySpendCapUsd: num("DAILY_SPEND_CAP_USD", 0.05),
+    maxSpendPerRequestUsd: num("MAX_SPEND_PER_REQUEST_USD", 0.09),
+    dailySpendCapUsd: num("DAILY_SPEND_CAP_USD", 0.3),
     mockBuy,
     devNoPaywall,
     dataDir: resolve(str("DATA_DIR", "data")),

@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import type { Config } from "./config.js";
 import { SpendCapError, type BudgetLedger } from "./ledger.js";
-import { mockResponse } from "./mock.js";
+import { mockResponse, mockFollowup } from "./mock.js";
 import type { Source } from "./sources.js";
 
 export const GATEWAY = "https://gateway.usebuy.ai";
@@ -23,7 +23,17 @@ export interface Spend {
 }
 export const newSpend = (): Spend => ({ usd: 0, capUsd: 0 });
 
+/** Follow-up purchases made after the searches, to go deeper on what the searches found. */
+export type FollowupKind = "x_about" | "x_comments" | "reddit_comments" | "youtube_comments";
+export const FOLLOWUPS: Record<FollowupKind, { source: Source; path: string; priceUsd: number; param: string }> = {
+  x_about: { source: "x", path: "/v1/social/x/tools/tikhub-api-v1-twitter-web-fetch-user-about", priceUsd: 0.005, param: "screen_name" },
+  x_comments: { source: "x", path: "/v1/social/x/tools/tikhub-api-v1-twitter-web-fetch-post-comments", priceUsd: 0.005, param: "tweet_id" },
+  reddit_comments: { source: "reddit", path: "/v1/social/reddit/tools/tikhub-api-v1-reddit-app-fetch-post-comments", priceUsd: 0.005, param: "post_id" },
+  youtube_comments: { source: "youtube", path: "/v1/social/youtube/tools/tikhub-api-v1-youtube-web-v2-get-video-comments", priceUsd: 0.005, param: "video_id" },
+};
+
 export interface PaidCall {
+  kind?: string;
   source: Source;
   endpoint: string;
   ok: boolean;
@@ -160,17 +170,37 @@ export class BuyClient {
     private readonly runner: PurchaseRunner = run,
   ) {}
 
-  /**
-   * One paid search. Checks both spend caps BEFORE signing anything, never retries, and records
-   * the outcome. A failure never aborts the whole report: the caller decides what to do without it.
-   */
+  /** One paid search. */
   async search(source: Source, query: string, spend: Spend): Promise<PaidCall> {
     const ep = ENDPOINTS[source];
-    const url = GATEWAY + ep.path;
-    const body = { query };
+    return this.purchase({
+      kind: `search:${source}`, source, url: GATEWAY + ep.path, body: { query }, priceUsd: ep.priceUsd,
+      ceilingUsd: this.cfg.buyMaxCallUsd[source], mock: () => mockResponse(source, query),
+    }, spend);
+  }
+
+  /** One paid follow-up (profile or comments) on something a search already found. */
+  async followup(kind: FollowupKind, value: string, spend: Spend): Promise<PaidCall> {
+    const ep = FOLLOWUPS[kind];
+    return this.purchase({
+      kind, source: ep.source, url: GATEWAY + ep.path, body: { queryParams: { [ep.param]: value } }, priceUsd: ep.priceUsd,
+      ceilingUsd: this.cfg.buyMaxFollowupUsd, mock: () => mockFollowup(kind, value),
+    }, spend);
+  }
+
+  /**
+   * One paid call. Checks both spend caps BEFORE signing anything, never retries, and records
+   * the outcome. A failure never aborts the whole report: the caller decides what to do without it.
+   */
+  private async purchase(
+    c: { kind: string; source: Source; url: string; body: unknown; priceUsd: number; ceilingUsd: number; mock: () => unknown },
+    spend: Spend,
+  ): Promise<PaidCall> {
+    const { source, url, body } = c;
+    const ep = { priceUsd: c.priceUsd };
 
     if (this.cfg.mockBuy) {
-      return { source, endpoint: url, ok: true, body: mockResponse(source, query), usd: 0, uncertain: false, mock: true };
+      return { kind: c.kind, source, endpoint: url, ok: true, body: c.mock(), usd: 0, uncertain: false, mock: true };
     }
     if (!this.cfg.reportPurchasesEnabled) throw new SpendCapError("Live report purchases are disabled.");
     if (!this.cfg.buyAllowedSources.includes(source)) throw new SpendCapError("Source is not enabled for purchases.");
@@ -183,7 +213,7 @@ export class BuyClient {
         `per-request spend cap $${this.cfg.maxSpendPerRequestUsd.toFixed(3)} would be exceeded (worst case so far $${spend.capUsd.toFixed(3)}, next call at least $${ep.priceUsd.toFixed(3)})`,
       );
     }
-    const maxUsd = Math.min(this.cfg.buyMaxCallUsd[source], ep.priceUsd * MAX_AMOUNT_HEADROOM, remaining);
+    const maxUsd = Math.min(c.ceilingUsd, ep.priceUsd * MAX_AMOUNT_HEADROOM, remaining);
     if (maxUsd < ep.priceUsd) throw new SpendCapError("Per-call limit is below the catalogue price.");
     // Hold the worst-case amount from today's budget BEFORE signing, so concurrent requests share one budget.
     // Hold request budget BEFORE the first await: async DB calls must not introduce a race.
@@ -200,6 +230,7 @@ export class BuyClient {
       GROWTHSCOUT_BUY_POLICY: JSON.stringify({
         sources: this.cfg.buyAllowedSources,
         maxCallUsd: this.cfg.buyMaxCallUsd,
+        maxFollowupUsd: this.cfg.buyMaxFollowupUsd,
         dailyCapUsd: this.cfg.dailySpendCapUsd,
       }),
     };
@@ -231,7 +262,7 @@ export class BuyClient {
           kind: "spend", endpoint: url, usd, capUsd, estimated: quoted === undefined, tx, ok: true, reservationId: release.id,
           note: quoted === undefined ? "amount = catalogue price (quote not readable)" : "amount = buy's quote",
         });
-        return { source, endpoint: url, ok: true, body: parsed, usd, tx, uncertain: false, mock: false };
+        return { kind: c.kind, source, endpoint: url, ok: true, body: parsed, usd, tx, uncertain: false, mock: false };
       }
 
       // Do not persist subprocess output: SDK/provider errors can contain secrets or signatures.
@@ -244,7 +275,7 @@ export class BuyClient {
         kind: "spend", endpoint: url, usd: uncertain ? ep.priceUsd : 0, capUsd: uncertain ? maxUsd : 0,
         estimated: uncertain, tx, ok: false, uncertain, note: detail, reservationId: release.id,
       });
-      return { source, endpoint: url, ok: false, body: null, usd: uncertain ? ep.priceUsd : 0, tx, uncertain, mock: false, error: detail };
+      return { kind: c.kind, source, endpoint: url, ok: false, body: null, usd: uncertain ? ep.priceUsd : 0, tx, uncertain, mock: false, error: detail };
     } finally {
       await release();
     }

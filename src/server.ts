@@ -29,13 +29,13 @@ export function buildRoutes(cfg: Config, payTo: string): RoutesConfig {
   return {
     "POST /api/pulse": {
       accepts: buildAccepts(cfg, cfg.pricePulseUsd, payTo),
-      description: "GrowthScout pulse: live X snapshot, Africa share, sentiment and a 0-100 growth score for a Web3 project",
+      description: "GrowthScout pulse: live X snapshot, regional mentions, sentiment and a 0-100 growth score for a Web3 project",
       mimeType: "application/json",
       extensions: ext,
     },
     "POST /api/audit": {
       accepts: buildAccepts(cfg, cfg.priceAuditUsd, payTo),
-      description: "GrowthScout audit: X + Reddit + YouTube, Africa-market gap analysis and a prioritised growth plan",
+      description: "GrowthScout audit: X + Reddit + YouTube data, the project's profile and audience replies, regional gap analysis and a prioritised growth plan",
       mimeType: "application/json",
       extensions: ext,
     },
@@ -59,10 +59,10 @@ code,pre{font:13px ui-monospace,monospace}pre{overflow:auto;background:var(--bg)
 .price{color:var(--acc);font-weight:600}a{color:var(--acc)}
 </style></head><body><main>
 <h1>GrowthScout</h1>
-<p class="sub">Growth intelligence for Web3 projects, with an Africa lens. Pay per report in stablecoins on Celo. No account, no API key.</p>
-<div class="card"><b>Pulse</b> <span class="price">$${cfg.pricePulseUsd.toFixed(2)}</span><br>Live X snapshot, Africa-mention share, sentiment and a 0-100 growth score.<pre>POST ${base}/api/pulse
+<p class="sub">Growth intelligence for Web3 projects, worldwide. Pay per report in stablecoins on Celo. No account, no API key.</p>
+<div class="card"><b>Pulse</b> <span class="price">$${cfg.pricePulseUsd.toFixed(2)}</span><br>Live X snapshot, regional mentions, sentiment and a 0-100 growth score.<pre>POST ${base}/api/pulse
 {"project":"Celo","handle":"@Celo_Org"}</pre></div>
-<div class="card"><b>Audit</b> <span class="price">$${cfg.priceAuditUsd.toFixed(2)}</span><br>X + Reddit + YouTube, Africa gap analysis and a prioritised growth plan.<pre>POST ${base}/api/audit
+<div class="card"><b>Audit</b> <span class="price">$${cfg.priceAuditUsd.toFixed(2)}</span><br>X + Reddit + YouTube, profile and reply data, regional gap analysis and a prioritised growth plan.<pre>POST ${base}/api/audit
 {"project":"Celo","keywords":["MiniPay"]}</pre></div>
 <div class="card">Pay with any x402 client. With <a href="https://usebuy.ai">buy</a>:<pre>buy curl --max-amount 0.12 -X POST \\
   -H 'Content-Type: application/json' \\
@@ -98,14 +98,14 @@ export function createApp(cfg: Config, deps: AppDeps = {}): Express {
   app.get("/", (_req, res) => res.type("html").send(landing(cfg)));
   app.get("/health", async (_req, res) => {
     const budgetReady = await ledger.ready(cfg.dailySpendCapUsd);
-    res.json({ ok: true, mock: cfg.mockBuy, paywall: !cfg.devNoPaywall, purchasesEnabled: cfg.reportPurchasesEnabled && budgetReady, agentId: cfg.agentId || null });
+    res.json({ ok: true, mock: cfg.mockBuy, paywall: !cfg.devNoPaywall, purchasesEnabled: cfg.reportPurchasesEnabled && budgetReady, agentId: cfg.agentId || null, caps: { perRequestUsd: cfg.maxSpendPerRequestUsd, dailyUsd: cfg.dailySpendCapUsd } });
   });
   app.get("/.well-known/agent.json", (_req, res) => res.json(buildRegistrationFile(cfg)));
   app.get("/api/growthscout/health", async (_req, res) => {
     const budgetReady = await ledger.ready(cfg.dailySpendCapUsd);
     res.json({ ok: true, mock: cfg.mockBuy, paywall: !cfg.devNoPaywall,
       purchasesEnabled: cfg.reportPurchasesEnabled && budgetReady,
-      budgetReady, agentId: cfg.agentId || null });
+      budgetReady, agentId: cfg.agentId || null, caps: { perRequestUsd: cfg.maxSpendPerRequestUsd, dailyUsd: cfg.dailySpendCapUsd } });
   });
   app.get("/api/growthscout/agent", (_req, res) => res.json(buildRegistrationFile(cfg)));
   app.get("/api/receipts", async (_req, res) => {
@@ -188,9 +188,9 @@ export function createApp(cfg: Config, deps: AppDeps = {}): Express {
       const request = (deps.parseReportRequest ?? parseRequest)(req.body);
       // Even cached reports need durable generated/customer evidence before settlement.
       if (!await ledger.ready(cfg.dailySpendCapUsd)) throw new SpendCapError("Shared authority unavailable.");
-      const { report, paidCalls, warnings, cached } = await agent.run(request, tier);
+      const { report, paidCalls, warnings, cached, diagnostics } = await agent.run(request, tier);
       // "generated" is NOT a sale: the customer's payment settles after this handler returns.
-      const payload = { report, evidence: { builderCode: cfg.builderCode, agentId: cfg.agentId || null, cached, supplierPurchases: paidCalls }, warnings };
+      const payload = { report, evidence: { builderCode: cfg.builderCode, agentId: cfg.agentId || null, cached, supplierPurchases: paidCalls, ...(diagnostics ? { responseShapes: diagnostics } : {}) }, warnings };
       const validated = deps.validateReportResponse ? deps.validateReportResponse(payload) : payload;
       await ledger.append({ kind: "generated", endpoint: `/api/${tier}`, usd: 0, ok: true,
         reportId: reportContext.getStore()?.reportId, note: cached ? "cache hit" : undefined });

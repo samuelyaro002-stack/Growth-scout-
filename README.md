@@ -2,7 +2,7 @@
 
 A growth-intelligence agent for Web3 projects, built for the **Celo "Agents on Open Rails"** hackathon.
 
-**What it does.** A project pays a few cents in stablecoins and gets a growth report with an Africa lens. To produce each report the agent itself pays for live X, Reddit and YouTube data through [buy](https://usebuy.ai). Two payment flows, both on Celo mainnet:
+**What it does.** A project pays a few cents in stablecoins and gets a worldwide growth report (with an optional focus region such as Africa, Latin America or Asia). To produce each report the agent itself pays for live X, Reddit and YouTube data through [buy](https://usebuy.ai). Two payment flows, both on Celo mainnet:
 
 ```
  customer ──x402 (USDC / USA₮)──▶ GrowthScout ──x402 via buy (USDC)──▶ X / Reddit / YouTube data
@@ -11,8 +11,8 @@ A growth-intelligence agent for Web3 projects, built for the **Celo "Agents on O
 
 | Route | Price | Data bought | Output |
 |---|---|---|---|
-| `POST /api/pulse` | $0.02 | X | score, Africa-mention share, sentiment, top posts |
-| `POST /api/audit` | $0.10 | X + Reddit + YouTube | all of the above + an evidence-graded growth plan |
+| `POST /api/pulse` | $0.02 | X | score, regional mentions, sentiment, top posts |
+| `POST /api/audit` | $0.10 | X + Reddit + YouTube, plus follow-up purchases: the project's X profile, top voices' profiles, and replies on the busiest post per platform (up to 9 paid calls) | all of the above + audience read + an evidence-graded growth plan |
 | `GET /api/sample` | free | fixture (labelled) | sample report for prospects |
 | `GET /api/receipts` | free | – | public ledger: supplier purchases, reports generated, customer payments **confirmed by the facilitator** |
 | `GET /.well-known/agent.json` | free | – | ERC-8004 registration file |
@@ -60,7 +60,7 @@ Each report cost the agent about $0.015 in data and sold for $0.10. Both reports
 
 1. A customer calls `/api/audit`; the x402 middleware answers `402` with the price, payee and builder code.
 2. The customer signs a payment; the facilitator verifies it.
-3. The agent reserves worst-case budget, then buys one search each from X, Reddit and YouTube through `buy`, one signed payment per call, never retried if the outcome is uncertain.
+3. The agent reserves worst-case budget, then buys one search each from X, Reddit and YouTube through `buy`, followed by profile and reply pulls on what those searches found (a fixed allowlist of 4 more endpoints, about $0.005 each, up to 9 calls in total), one signed payment per call, never retried if the outcome is uncertain.
 4. The analysis (deterministic, no LLM) removes duplicate posts across sources, keeps only posts that mention the project, and **uses only posts with a verifiable publication date in the last 30 days** as the basis for recommendations. Fewer than three such posts ⇒ `confidence: "low"` and no growth plan is sold on thin evidence.
 5. If nothing usable was bought, the route returns 4xx/5xx, which means the x402 middleware **does not settle** and the customer is not charged.
 6. After settlement the facilitator's confirmation, tx hash and payer are written to the public ledger.
@@ -112,13 +112,13 @@ USDC is always offered. USA₮ is offered only when its EIP-712 domain is config
 
 ## What is and isn't verified
 
-Verified by `npm test` (43 tests): tag encoding and placement, worst-case caps, concurrent requests sharing one budget, never-retry behaviour, request validation, de-duplication and recency rules, the signer's argument and environment isolation, and the **real x402 middleware** returning a correct 402 and completing a full signed payment against a stand-in facilitator, ending in a recorded "settled" entry.
+Verified by `npm test` (50 tests): tag encoding and placement, worst-case caps, concurrent requests sharing one budget, never-retry behaviour, request validation, de-duplication and recency rules, the signer's argument and environment isolation, and the **real x402 middleware** returning a correct 402 and completing a full signed payment against a stand-in facilitator, ending in a recorded "settled" entry.
 
 Not covered by tests: a live settlement through `api.x402.celo.org`, a live purchase of all three sources, and the registration transaction. The *Live proof* table above is filled in only from those real runs.
 
 ## Honest limits
 
-Sentiment is a keyword lexicon and the score is a transparent heuristic (see `methodology` in each report). "Africa share" is the share of matching posts that *mention* African countries, cities or local-currency terms; it does not measure where the audience lives. The rules require independent users, meaning wallets that were not funded by the builder, and the first report here is a developer-funded test.
+Sentiment is a keyword lexicon and the score is a transparent heuristic (see `methodology` in each report). Regions are counted from places, cities and local-currency terms that matching posts *mention* (Africa, Europe, North America, Latin America, Asia, Middle East, Oceania); this does not measure where the audience lives. Pass `"focusRegion": "Africa"` (or any region) to highlight one. The rules require independent users, meaning wallets that were not funded by the builder, and the first report here is a developer-funded test.
 
 ## Scripts
 

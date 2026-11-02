@@ -25,9 +25,9 @@ services:
       - key: BUY_ALLOWED_SOURCES
         value: x,reddit,youtube
       - key: MAX_SPEND_PER_REQUEST_USD
-        value: "0.0225"
+        value: "0.09"
       - key: DAILY_SPEND_CAP_USD
-        value: "0.05"
+        value: "0.30"
       # live supplier buying stays OFF until you set this to 1 in the dashboard
       - key: REPORT_PURCHASES_ENABLED
         value: "0"
