@@ -28,9 +28,9 @@ services:
         value: "0.09"
       - key: DAILY_SPEND_CAP_USD
         value: "0.30"
-      # live supplier buying stays OFF until you set this to 1 in the dashboard
+      # live supplier buying: set to 1 in the dashboard once. sync:false so a blueprint re-sync never switches it back.
       - key: REPORT_PURCHASES_ENABLED
-        value: "0"
+        sync: false
       # secrets / per-deployment values: set in the dashboard
       - key: AGENT_PRIVATE_KEY
         sync: false
