@@ -18,7 +18,8 @@
     "probe:usat": "tsx scripts/probe-usat.ts",
     "verify-tx": "tsx scripts/verify-tx.ts",
     "check-signer": "node src/runner.mjs --check-signer",
-    "check-402": "tsx scripts/check-402.ts"
+    "check-402": "tsx scripts/check-402.ts",
+    "build:pay": "esbuild web/pay.js --bundle --minify --format=iife --target=es2020 --outfile=public/pay.js"
   },
   "dependencies": {
     "@celo/attribution-tags": "^0.5.0",
@@ -36,6 +37,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.5",
     "@x402/fetch": "^2.28.0",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.2"
   }
 }

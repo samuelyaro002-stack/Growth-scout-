@@ -13,6 +13,7 @@ A growth-intelligence agent for Web3 projects, built for the **Celo "Agents on O
 |---|---|---|---|
 | `POST /api/pulse` | $0.02 | X | score, regional mentions, sentiment, top posts |
 | `POST /api/audit` | $0.10 | X + Reddit + YouTube, plus follow-up purchases: the project's X profile, top voices' profiles, and replies on the busiest post per platform (up to 9 paid calls) | all of the above + audience read + an evidence-graded growth plan |
+| `GET /pay` | free | – | browser page: connect a wallet, pay $0.10 over x402, read the report (bundle built with `npm run build:pay`) |
 | `GET /api/sample` | free | fixture (labelled) | sample report for prospects |
 | `GET /api/receipts` | free | – | public ledger: supplier purchases, reports generated, customer payments **confirmed by the facilitator** |
 | `GET /.well-known/agent.json` | free | – | ERC-8004 registration file |

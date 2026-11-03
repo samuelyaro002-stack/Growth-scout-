@@ -16,6 +16,7 @@ import { buildAccepts } from "./pricing.js";
 import { assertValidCode, checkRepoMatchesCode } from "./tag.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import type { BudgetLedger } from "./ledger.js";
 
 export function resolvePayTo(cfg: Config): string {
@@ -67,7 +68,7 @@ code,pre{font:13px ui-monospace,monospace}pre{overflow:auto;background:var(--bg)
 <div class="card">Pay with any x402 client. With <a href="https://usebuy.ai">buy</a>:<pre>buy curl --max-amount 0.12 -X POST \\
   -H 'Content-Type: application/json' \\
   --data '{"project":"YourProject"}' \\
-  ${base}/api/audit</pre>Not ready to pay? <a href="/api/sample">See a free sample report</a> (fixture data, clearly labelled).</div>
+  ${base}/api/audit</pre>Prefer a browser? <a href="/pay"><b>Pay with your wallet here</b></a>. Not ready to pay? <a href="/api/sample">See a free sample report</a> (fixture data, clearly labelled).</div>
 <p class="sub">Every paid report is built from data we buy live through <a href="https://usebuy.ai">buy</a>. <a href="/api/receipts">Public ledger</a> · <a href="/.well-known/agent.json">ERC-8004 identity</a></p>
 </main></body></html>`;
 }
@@ -96,6 +97,10 @@ export function createApp(cfg: Config, deps: AppDeps = {}): Express {
 
   // ---- free routes (registered before the paywall) ----
   app.get("/", (_req, res) => res.type("html").send(landing(cfg)));
+  // Browser payment page for independent customers. pay.js is a committed bundle (npm run build:pay).
+  const publicDir = fileURLToPath(new URL("../public/", import.meta.url));
+  app.get("/pay", (_req, res) => res.sendFile(publicDir + "pay.html"));
+  app.get("/pay.js", (_req, res) => res.type("js").sendFile(publicDir + "pay.js"));
   app.get("/health", async (_req, res) => {
     const budgetReady = await ledger.ready(cfg.dailySpendCapUsd);
     res.json({ ok: true, mock: cfg.mockBuy, paywall: !cfg.devNoPaywall, purchasesEnabled: cfg.reportPurchasesEnabled && budgetReady, agentId: cfg.agentId || null, caps: { perRequestUsd: cfg.maxSpendPerRequestUsd, dailyUsd: cfg.dailySpendCapUsd } });

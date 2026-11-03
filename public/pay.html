@@ -1,0 +1,28 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GrowthScout: get an audit</title>
+<style>
+:root{--bg:#fbfaf6;--fg:#1a1a17;--mut:#6b6a63;--acc:#0b7a4b;--card:#fff;--line:#e4e1d6;--err:#b3261e}
+@media (prefers-color-scheme:dark){:root{--bg:#121410;--fg:#eceae0;--mut:#9c9a8e;--acc:#4cd694;--card:#1a1d17;--line:#2c3027;--err:#ff8a80}}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,sans-serif}
+main{max-width:720px;margin:0 auto;padding:32px 16px}
+h1{font-size:1.8rem;margin:0 0 4px}h2{font-size:1.1rem;margin:0 0 8px}.mut,.sub{color:var(--mut)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 18px;margin:14px 0;overflow-wrap:anywhere}
+label{display:block;margin:12px 0 4px;font-weight:600}input,select{width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font:inherit}
+button{padding:11px 18px;border-radius:8px;border:0;background:var(--acc);color:#fff;font:inherit;font-weight:600;cursor:pointer;margin:14px 8px 0 0}button:disabled{opacity:.5;cursor:not-allowed}
+button.alt{background:transparent;color:var(--acc);border:1px solid var(--acc)}
+.status{margin-top:12px;min-height:1.5em}.status.err{color:var(--err)}.status.ok{color:var(--acc)}a{color:var(--acc)}.rec{margin:10px 0}
+</style></head><body><main>
+<h1>GrowthScout audit</h1>
+<p class="sub">Worldwide growth report for a Web3 project. <b>$0.10</b> in USDC or USD₮ on Celo, paid with a signature from your own wallet (no gas, no account).</p>
+<div class="card">
+<label for="project">Project name</label><input id="project" placeholder="e.g. Celo" maxlength="60">
+<label for="handle">X handle (optional, improves accuracy)</label><input id="handle" placeholder="@Celo_Org" maxlength="16">
+<label for="keywords">Up to 3 keywords, comma separated (optional)</label><input id="keywords" placeholder="MiniPay, stablecoin">
+<label for="focus">Highlight a region (optional)</label>
+<select id="focus"><option value="">Worldwide</option><option>Africa</option><option>Europe</option><option>North America</option><option>Latin America</option><option>Asia</option><option>Middle East</option><option>Oceania</option></select>
+<button id="connect" class="alt" type="button">Connect wallet</button><button id="pay" type="button" disabled>Pay $0.10 and generate</button>
+<div id="status" class="status" role="status"></div>
+</div>
+<div id="report"></div>
+<p class="sub">Your wallet must hold at least $0.10 of USDC or USD₮ on Celo. If no report can be produced, the payment does not settle. <a href="/">Back</a> · <a href="/api/receipts">Public ledger</a></p>
+</main><script src="/pay.js"></script></body></html>

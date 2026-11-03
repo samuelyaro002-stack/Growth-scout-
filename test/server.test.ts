@@ -262,3 +262,15 @@ test("FULL PAID FLOW: signed x402 payment -> report -> facilitator confirms -> '
   assert.equal(settled.payer?.toLowerCase(), buyer.address.toLowerCase());
   assert.equal(settled.asset?.toLowerCase(), "0xceba9300f2b948710d2653dd7b07f33a8b32118c");
 });
+
+test("browser payment page and its bundle are served free, and the landing page links to it", async () => {
+  const cfg = testConfig({ MOCK_BUY: "1", DEV_NO_PAYWALL: "1" });
+  const base = await listen(createApp(cfg));
+  const page = await fetch(`${base}/pay`);
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /Pay \$0\.10 and generate/);
+  const js = await fetch(`${base}/pay.js`);
+  assert.equal(js.status, 200);
+  assert.match(js.headers.get("content-type") ?? "", /javascript/);
+  assert.match(await (await fetch(base)).text(), /href="\/pay"/);
+});
