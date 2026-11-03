@@ -50,7 +50,7 @@ async function pay() {
     // The wallet signs locally; nothing is sent until the user approves the typed-data prompt.
     const signer = { address: account, signTypedData: (m) => walletClient.signTypedData({ account, ...m }) };
     const client = new x402Client().register("eip155:*", new ExactEvmScheme(signer));
-    status("Approve the payment in your wallet (a signature, no gas). The agent then buys live data: this takes up to a minute.", "");
+    status("Approve the payment in your wallet (a signature, no gas). The agent then buys live data and analyses it. This takes a few minutes (about 2), so please keep this tab open.", "");
     const res = await wrapFetchWithPayment(fetch, client)("/api/audit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const header = res.headers.get("payment-response");
     const settlement = header ? JSON.parse(atob(header)) : null;
@@ -86,6 +86,11 @@ function render(j, settlement) {
   const buys = j.evidence?.supplierPurchases ?? [];
   root.append(section(`Data the agent bought for you (${buys.length} payments via buy)`, el("ul", {}, ...buys.map((b) =>
     el("li", {}, `${b.kind ?? b.source} · $${Number(b.usd).toFixed(3)} · `, b.tx ? el("a", { href: scan(b.tx), target: "_blank", rel: "noopener" }, b.tx.slice(0, 10) + "…") : "no tx")))));
+  if (j.evidence?.responseShapes?.length) {
+    const d = el("details", { class: "card" }, el("summary", {}, "Technical details: response field names (no content)"),
+      el("pre", {}, JSON.stringify(j.evidence.responseShapes, null, 1)));
+    root.append(d);
+  }
   if (j.warnings?.length) root.append(section("Notes", el("ul", {}, ...j.warnings.map((w) => el("li", {}, w)))));
 }
 
