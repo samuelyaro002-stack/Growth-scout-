@@ -48,29 +48,40 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 function landing(cfg: Config): string {
   const base = esc(cfg.publicUrl);
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>GrowthScout</title>
-<style>
-:root{--bg:#fbfaf6;--fg:#1a1a17;--mut:#6b6a63;--acc:#0b7a4b;--card:#fff;--line:#e4e1d6}
-@media (prefers-color-scheme:dark){:root{--bg:#121410;--fg:#eceae0;--mut:#9c9a8e;--acc:#4cd694;--card:#1a1d17;--line:#2c3027}}
-body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,sans-serif}
-main{max-width:720px;margin:0 auto;padding:40px 16px}
-h1{font-size:2rem;margin:0 0 4px}.sub{color:var(--mut);margin:0 0 28px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:14px 0}
-code,pre{font:13px ui-monospace,monospace}pre{overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px}
-.price{color:var(--acc);font-weight:600}a{color:var(--acc)}
-</style></head><body><main>
-<h1>GrowthScout</h1>
-<p class="sub">Growth intelligence for Web3 projects, worldwide. Pay per report in stablecoins on Celo. No account, no API key.</p>
+<title>GrowthScout</title><meta name="theme-color" content="#07070a"><link rel="stylesheet" href="/style.css"></head><body>
+<header class="wrap nav"><a class="logo" href="/">growth<i>scout</i></a>
+<nav class="navlinks"><a class="hide" href="/api/sample">Sample</a><a class="hide" href="/api/receipts">Ledger</a><a class="hide" href="/.well-known/agent.json">Identity</a><a class="btn" href="/pay">Get your audit &rarr;</a></nav></header>
+<section class="hero"><canvas id="orb" aria-hidden="true"></canvas><div class="wrap">
+<div class="eyebrow">Growth &middot; Intelligence &middot; Worldwide</div>
+<h1><span>Is your project</span><span>visible where</span><span>it matters?</span></h1>
+<p class="lead">A Web3 growth audit built from live data our agent buys, one payment at a time.</p>
+<div class="ctas"><a class="btn" href="/pay">Get your audit &rarr;</a><a class="btn alt" href="/api/sample">See a sample report &darr;</a></div>
+</div></section>
+<section class="violet"><div class="wrap"><div class="eyebrow" style="color:#d9d0f5">How it works</div><h2>Four steps. One report.</h2>
+<div class="grid">
+<div class="step"><b class="n">01</b><h3>You pay</h3><p>$${cfg.priceAuditUsd.toFixed(2)} in USDC or USD&#8366; on Celo, one wallet signature, no account.</p></div>
+<div class="step"><b class="n">02</b><h3>The agent buys data</h3><p>Live X, Reddit and YouTube searches, profiles and replies, each paid through buy.</p></div>
+<div class="step"><b class="n">03</b><h3>We analyse</h3><p>Deduplicated, dated, scored 0&ndash;100 with regional mentions worldwide.</p></div>
+<div class="step"><b class="n">04</b><h3>You act</h3><p>An evidence-graded growth plan, with every purchase linked on-chain.</p></div>
+</div></div></section>
+<section class="sec wrap"><div class="eyebrow">Pricing</div><h2>Two reports.</h2>
+<div class="grid">
 <div class="card"><b>Pulse</b> <span class="price">$${cfg.pricePulseUsd.toFixed(2)}</span><br>Live X snapshot, regional mentions, sentiment and a 0-100 growth score.<pre>POST ${base}/api/pulse
 {"project":"Celo","handle":"@Celo_Org"}</pre></div>
-<div class="card"><b>Audit</b> <span class="price">$${cfg.priceAuditUsd.toFixed(2)}</span><br>X + Reddit + YouTube, profile and reply data, regional gap analysis and a prioritised growth plan.<pre>POST ${base}/api/audit
-{"project":"Celo","keywords":["MiniPay"]}</pre></div>
-<div class="card">Pay with any x402 client. With <a href="https://usebuy.ai">buy</a>:<pre>buy curl --max-amount 0.12 -X POST \\
+<div class="card"><b>Audit</b> <span class="price">$${cfg.priceAuditUsd.toFixed(2)}</span><br>X + Reddit + YouTube, profile and reply data, regional gap analysis and a prioritised growth plan. Takes about 2 minutes.<pre>POST ${base}/api/audit
+{"project":"Celo","keywords":["MiniPay"]}</pre></div></div>
+<div class="card">Prefer the command line? Pay with any x402 client, for example <a href="https://usebuy.ai">buy</a>:<pre>buy curl --max-amount 0.12 -X POST \\
   -H 'Content-Type: application/json' \\
   --data '{"project":"YourProject"}' \\
-  ${base}/api/audit</pre>Prefer a browser? <a href="/pay"><b>Pay with your wallet here</b></a>. Not ready to pay? <a href="/api/sample">See a free sample report</a> (fixture data, clearly labelled).</div>
-<p class="sub">Every paid report is built from data we buy live through <a href="https://usebuy.ai">buy</a>. <a href="/api/receipts">Public ledger</a> · <a href="/.well-known/agent.json">ERC-8004 identity</a></p>
-</main></body></html>`;
+  ${base}/api/audit</pre></div>
+<p class="footer">Every paid report is built from data we buy live through <a href="https://usebuy.ai">buy</a>. <a href="/api/receipts">Public ledger</a> &middot; <a href="/.well-known/agent.json">ERC-8004 identity</a></p>
+</section>
+<script>(function(){var c=document.getElementById("orb");if(!c||matchMedia("(prefers-reduced-motion: reduce)").matches)return;var x=c.getContext("2d"),S=0,P=[],i;
+function size(){S=c.width=c.height=Math.min(640,innerWidth*.62)*devicePixelRatio}size();addEventListener("resize",size);
+for(i=0;i<420;i++){var u=Math.random()*2-1,t=Math.random()*6.283,r=Math.sqrt(1-u*u);P.push([r*Math.cos(t),u,r*Math.sin(t),Math.random()<.04])}
+var a=0;function f(){a+=.003;x.clearRect(0,0,S,S);var g=x.createRadialGradient(S/2,S/2,S*.05,S/2,S/2,S/2);g.addColorStop(0,"rgba(106,63,196,.55)");g.addColorStop(.8,"rgba(42,21,96,.25)");g.addColorStop(1,"rgba(42,21,96,0)");x.fillStyle=g;x.beginPath();x.arc(S/2,S/2,S/2*.96,0,7);x.fill();
+for(i=0;i<P.length;i++){var p=P[i],X=p[0]*Math.cos(a)-p[2]*Math.sin(a),Z=p[0]*Math.sin(a)+p[2]*Math.cos(a),k=(Z+1.6)/2.6;x.fillStyle=p[3]?"#c6f24a":"rgba(244,243,238,"+(.2+.6*k)+")";x.beginPath();x.arc(S/2+X*S*.46,S/2+p[1]*S*.46,(p[3]?3:1.4)*k*devicePixelRatio,0,7);x.fill()}requestAnimationFrame(f)}f()})();</script>
+</body></html>`;
 }
 
 export interface AppDeps {
@@ -100,6 +111,7 @@ export function createApp(cfg: Config, deps: AppDeps = {}): Express {
   // Browser payment page for independent customers. pay.js is a committed bundle (npm run build:pay).
   const publicDir = fileURLToPath(new URL("../public/", import.meta.url));
   app.get("/pay", (_req, res) => res.sendFile(publicDir + "pay.html"));
+  app.get("/style.css", (_req, res) => res.type("css").sendFile(publicDir + "style.css"));
   app.get("/pay.js", (_req, res) => res.type("js").sendFile(publicDir + "pay.js"));
   app.get("/health", async (_req, res) => {
     const budgetReady = await ledger.ready(cfg.dailySpendCapUsd);
