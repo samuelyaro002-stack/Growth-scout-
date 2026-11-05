@@ -259,3 +259,15 @@ test("a repeated report uses cache without repeating supplier payment evidence",
   assert.equal(cached.cached, true);
   assert.deepEqual(cached.paidCalls, []);
 });
+
+test("when the quote line is unreadable, the charge echoed in the response body is recorded as the actual amount", async t => {
+  const { cfg, ledger } = fixture(t);
+  const runner: PurchaseRunner = async () => ({
+    code: 0, stdout: JSON.stringify({ payment: { usd: "0.005" }, output: { posts: [] } }),
+    stderr: JSON.stringify({ step: "settled", transaction: tx }),
+  });
+  const result = await new BuyClient(cfg, ledger, runner).search("x", "Acme", newSpend());
+  assert.equal(result.ok, true);
+  assert.equal(result.usd, 0.005);
+  assert.equal(ledger.summary().supplier.amountsEstimatedFromCatalogue, 0);
+});

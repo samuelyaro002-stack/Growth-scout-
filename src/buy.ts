@@ -253,7 +253,11 @@ export class BuyClient {
       const parsed = parseBody(scrub(stdout));
 
       if (code === 0 && parsed !== null && tx) {
-        const quoted = parseQuotedUsd(safeStderr, maxUsd);
+        // The gateway echoes what it charged in the response body (payment.usd); prefer that to a catalogue guess.
+        const bodyUsd = typeof parsed === "object" && parsed !== null
+          ? Number((parsed as { payment?: { usd?: unknown } }).payment?.usd) : NaN;
+        const quoted = parseQuotedUsd(safeStderr, maxUsd) ??
+          (Number.isFinite(bodyUsd) && bodyUsd > 0 && bodyUsd <= maxUsd * 1.01 ? bodyUsd : undefined);
         const usd = quoted ?? ep.priceUsd;
         const capUsd = quoted !== undefined ? quoted : maxUsd; // unreadable quote: assume the worst for the caps
         spend.usd += usd;
