@@ -76,8 +76,8 @@ function render(j, settlement) {
   if (r.focus) root.append(section(`Focus: ${r.focus.requested}`, el("p", {}, `${r.focus.posts} matching post(s), ${Math.round(r.focus.share * 100)}% of the conversation.`)));
   if (r.profile || r.voices?.length || r.audience) {
     const items = [];
-    if (r.profile) items.push(el("li", {}, `Project X account: ${r.profile.followers ?? "?"} followers${r.profile.location ? ", " + r.profile.location : ""}`));
-    for (const v of r.voices ?? []) items.push(el("li", {}, `@${v.handle}: ${v.followers ?? "?"} followers${v.location ? ", " + v.location : ""}`));
+    if (r.profile) items.push(el("li", {}, `Project X account${r.profile.verified ? " (verified)" : ""}${r.profile.followers !== undefined ? `: ${r.profile.followers} followers` : ""}${r.profile.location ? ", based in " + r.profile.location : ""}`));
+    for (const v of r.voices ?? []) items.push(el("li", {}, `@${v.handle}${v.followers !== undefined ? `: ${v.followers} followers` : ""}${v.location ? ", based in " + v.location : ""}`));
     if (r.audience) items.push(el("li", {}, `Replies read: ${r.audience.comments}, net sentiment ${r.audience.net}`));
     root.append(section("Voices and audience", el("ul", {}, ...items)));
   }

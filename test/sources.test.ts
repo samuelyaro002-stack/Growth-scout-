@@ -42,3 +42,9 @@ test("items with no text are dropped, negative or junk numbers become 0", () => 
   assert.equal(posts[0].likes, 0);
   assert.equal(posts[0].replies, 0);
 });
+
+test("parseProfile reads the real x_about shape: location and verified, no invented followers", async () => {
+  const { parseProfile } = await import("../src/sources.js");
+  const p = parseProfile({ capability: "x", payment: { usd: "0.005" }, output: { name: "Acme", blue_verified: true, about: { account_based_in: "Nigeria" } } });
+  assert.deepEqual(p, { followers: undefined, following: undefined, location: "Nigeria", verified: true });
+});

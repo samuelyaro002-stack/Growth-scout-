@@ -95,6 +95,7 @@ export class GrowthAgent {
     const bySource: Partial<Record<Source, Post[]>> = {};
     const paidCalls: ReportResult["paidCalls"] = [];
     const warnings: string[] = [];
+    const searchShapes: NonNullable<ReportResult["diagnostics"]> = [];
 
     // Sequential on purpose: each purchase is checked against the spend caps before it is signed.
     for (const source of TIER_SOURCES[tier]) {
@@ -115,7 +116,9 @@ export class GrowthAgent {
         warnings.push(`${source}: data purchase failed${call.uncertain ? " (payment status uncertain, not retried)" : ""}`);
         continue;
       }
-      bySource[source] = normalizeItems(source, call.body);
+      const items = normalizeItems(source, call.body);
+      bySource[source] = items;
+      searchShapes.push({ kind: `search:${source}`, readable: items.length > 0, keyPaths: keyPaths(call.body, 90) });
     }
 
     if (Object.keys(bySource).length === 0) {
@@ -139,7 +142,7 @@ export class GrowthAgent {
           : `none of the ${report.evidence.postsReturned} returned posts mention "${req.project}"`;
       throw new ReportError(`No usable evidence: ${why}. Try the exact project name, its X handle, or a keyword.`, paidCalls);
     }
-    const result: ReportResult = { cached: false, report, paidCalls, warnings, ...(deeper?.diagnostics.length ? { diagnostics: deeper.diagnostics } : {}) };
+    const result: ReportResult = { cached: false, report, paidCalls, warnings, ...(searchShapes.length || deeper?.diagnostics.length ? { diagnostics: [...searchShapes, ...(deeper?.diagnostics ?? [])] } : {}) };
     this.cache.set(key, { at: Date.now(), result });
     return result;
   }
@@ -214,7 +217,7 @@ export class GrowthAgent {
       note(kind, body, items.length > 0);
       audience.push(...items.slice(0, 50));
     };
-    const topX = busiest(xPosts, (p) => !!p.id && /^\d{1,25}$/.test(p.id) && p.replies > 0);
+    const topX = busiest(xPosts, (p) => !!p.id && /^\d{1,25}$/.test(p.id));
     await comments("x_comments", "x", topX?.id);
     const topReddit = busiest(relevant("reddit"), (p) => !!p.id && /^(t3_)?[a-z0-9]{1,17}$/i.test(p.id));
     await comments("reddit_comments", "reddit", topReddit?.id ? "t3_" + topReddit.id.replace(/^t3_/i, "").toLowerCase() : undefined);
