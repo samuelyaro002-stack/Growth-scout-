@@ -60,6 +60,8 @@ export function summarize(entries: LedgerEntry[]) {
       confirmedPayments: settled.length,
       uniquePayers: new Set(settled.map(e => e.payer?.toLowerCase()).filter(Boolean)).size,
       settlementTxs: settled.map(e => e.tx).filter(Boolean),
+      // Payer addresses are public on-chain; listing them lets anyone verify each payment without asking customers.
+      payments: settled.map(e => ({ at: e.ts, tx: e.tx, payer: e.payer, usd: e.usd })),
       settlementsNeedingReview: entries.filter(e => e.kind === "customer_pending" &&
         !settled.some(s => s.reportId === e.reportId)).length,
     },
