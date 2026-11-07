@@ -68,6 +68,14 @@ Each report cost the agent about $0.015 in data and sold for $0.10. Both reports
 
 **Customers outside the builder's wallets.** Report 3 (Block Slide, above) was paid by the Block Slide developer from their own wallet `0x1C47Cb8C…43B73e77A`. The developer funded it themselves by bridging their own USDC from Arbitrum through Relay and swapping on Celo. Before the payment, the builder also sent that wallet about 1.35 CELO for gas, roughly 18% of the CELO later swapped into the USDC. The wallet therefore **was not wholly independent of the builder**, and the builder does not claim it as fully independent. We list everything so reviewers can judge it for themselves: the payment is a 0.10 USDC x402 transfer to the agent wallet, and the funding history is public on Celoscan.
 
+**Independent customer payment.** One audit was paid by a wallet the builder does not control and did not fund:
+
+| Payer wallet | Payment tx |
+|---|---|
+| `0xfC73932Db805CBA113b02C30687A677B5DAD2384` | `0x5a3cd82cfe356ea4f9820b23a1c801734a5a3efbe945c14b72af09b6c6b29483` |
+
+The builder traced the payer's funding one hop back on Celoscan: its USDC arrived through a bridge (the bridge platform was not identified) and its gas CELO came from another wallet. Neither came from a builder-controlled wallet (`0x0902…02D9` or the agent wallet). This was checked by hand and one hop only, so reviewers are invited to repeat it from the payer address.
+
 Every customer payment is a public 0.10 USDC transfer into the agent wallet, so anyone can open each payer address and see where its funds came from:
 
 **https://celoscan.io/address/0x91a1F1d9CA6f8649A907Fd5EcCf886E46CbCEf32#tokentxns**
