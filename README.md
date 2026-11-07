@@ -66,8 +66,14 @@ Each report cost the agent about $0.015 in data and sold for $0.10. Both reports
 | Supplier: YouTube search through buy | `0xc95eb613a4a02a6761597f63d2d454079f5f1ffb4101ba8f807a80024a8d57c1` |
 | Supplier: X profile lookup through buy | `0x426722249bb0bf66bf3a0de2b48f8a8935d77fdddecb31a9f756e1357181196b` |
 
+**Independent customers.** Apart from the builder's own test runs (reports 1 and 2) and report 3 (Block Slide, listed above and **not counted here**), the agent received paid audits from two wallets that the builder checked on Celoscan and found were not funded by any builder-controlled wallet. They belong to members of one project's team that the builder contacted. Every customer payment is a public 0.10 USDC transfer into the agent wallet, so anyone can open the payer addresses and check where each payer's funds came from:
+
+**https://celoscan.io/address/0x91a1F1d9CA6f8649A907Fd5EcCf886E46CbCEf32#tokentxns**
+
+(The service's `/api/receipts` ledger lives on a free host that resets on every redeploy, so the on-chain history above is the record of truth.)
+
 **Disclosures.**
-- Both payments came from a wallet the author controls (`0x0902…02D9`). They are **developer-funded tests, not independent customers**.
+- Reports 1 and 2 were paid from a wallet the author controls (`0x0902…02D9`). They are **developer-funded tests**, not independent customers.
 - Supplier amounts in `/api/receipts` are marked `amountsEstimatedFromCatalogue`: the ledger records buy's catalogue price ($0.005 each) because the quote line was not captured; the on-chain transactions are authoritative.
 - The first report counted three unrelated posts that reused the phrase "GG attention" (fan content, a pachinko promotion). That showed the matching was too loose for an ambiguous name, so when a handle or keywords are supplied, a post must now @mention the handle, use a chosen keyword, or pair the name with Web3 vocabulary, and X is searched by handle.
 
@@ -133,7 +139,7 @@ Not covered by tests: a live settlement through `api.x402.celo.org`, a live purc
 
 ## Honest limits
 
-Sentiment is a keyword lexicon and the score is a transparent heuristic (see `methodology` in each report). Regions are counted from places, cities and local-currency terms that matching posts *mention* (Africa, Europe, North America, Latin America, Asia, Middle East, Oceania); this does not measure where the audience lives. Pass `"focusRegion": "Africa"` (or any region) to highlight one. The rules require independent users, meaning wallets that were not funded by the builder, and the first report here is a developer-funded test.
+Sentiment is a keyword lexicon and the score is a transparent heuristic (see `methodology` in each report). Regions are counted from places, cities and local-currency terms that matching posts *mention* (Africa, Europe, North America, Latin America, Asia, Middle East, Oceania); this does not measure where the audience lives. Pass `"focusRegion": "Africa"` (or any region) to highlight one. The rules require independent users, meaning wallets that were not funded by the builder. Reports 1 and 2 are developer-funded tests; the independent payments are described under *Independent customers* above and are verifiable on Celoscan.
 
 ## Scripts
 
