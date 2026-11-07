@@ -56,7 +56,7 @@ All on Celo mainnet. Every hash below can be opened on [Celoscan](https://celosc
 
 Each report cost the agent about $0.015 in data and sold for $0.10. Both reports were for GG Attention, a project the author also builds.
 
-**Paid report 3** (full audit with follow-up purchases, run on Block Slide by the Block Slide developer from their own wallet; not counted as an independent customer below)
+**Paid report 3** (full audit with follow-up purchases, run on Block Slide by the Block Slide developer from their own wallet; see *Customers outside the builder's wallets* below)
 
 | Step | Tx |
 |---|---|
@@ -66,7 +66,9 @@ Each report cost the agent about $0.015 in data and sold for $0.10. Both reports
 | Supplier: YouTube search through buy | `0xc95eb613a4a02a6761597f63d2d454079f5f1ffb4101ba8f807a80024a8d57c1` |
 | Supplier: X profile lookup through buy | `0x426722249bb0bf66bf3a0de2b48f8a8935d77fdddecb31a9f756e1357181196b` |
 
-**Independent customers.** Apart from the builder's own test runs (reports 1 and 2) and report 3 (Block Slide, listed above and **not counted here**), the agent received paid audits from two wallets that the builder checked on Celoscan and found were not funded by any builder-controlled wallet. They belong to members of one project's team that the builder contacted. Every customer payment is a public 0.10 USDC transfer into the agent wallet, so anyone can open the payer addresses and check where each payer's funds came from:
+**Customers outside the builder's wallets.** Report 3 (Block Slide, above) was paid by the Block Slide developer from their own wallet `0x1C47Cb8C…43B73e77A`. The developer funded it themselves by bridging their own USDC from Arbitrum through Relay and swapping on Celo. Before the payment, the builder also sent that wallet about 1.35 CELO for gas, roughly 18% of the CELO later swapped into the USDC. The wallet therefore **was not wholly independent of the builder**, and the builder does not claim it as fully independent. We list everything so reviewers can judge it for themselves: the payment is a 0.10 USDC x402 transfer to the agent wallet, and the funding history is public on Celoscan.
+
+Every customer payment is a public 0.10 USDC transfer into the agent wallet, so anyone can open each payer address and see where its funds came from:
 
 **https://celoscan.io/address/0x91a1F1d9CA6f8649A907Fd5EcCf886E46CbCEf32#tokentxns**
 
@@ -139,7 +141,7 @@ Not covered by tests: a live settlement through `api.x402.celo.org`, a live purc
 
 ## Honest limits
 
-Sentiment is a keyword lexicon and the score is a transparent heuristic (see `methodology` in each report). Regions are counted from places, cities and local-currency terms that matching posts *mention* (Africa, Europe, North America, Latin America, Asia, Middle East, Oceania); this does not measure where the audience lives. Pass `"focusRegion": "Africa"` (or any region) to highlight one. The rules require independent users, meaning wallets that were not funded by the builder. Reports 1 and 2 are developer-funded tests; the independent payments are described under *Independent customers* above and are verifiable on Celoscan.
+Sentiment is a keyword lexicon and the score is a transparent heuristic (see `methodology` in each report). Regions are counted from places, cities and local-currency terms that matching posts *mention* (Africa, Europe, North America, Latin America, Asia, Middle East, Oceania); this does not measure where the audience lives. Pass `"focusRegion": "Africa"` (or any region) to highlight one. The rules require independent users, meaning wallets that were not funded by the builder. Reports 1 and 2 are developer-funded tests; payments by people outside the team are described under *Customers outside the builder's wallets* above and are verifiable on Celoscan.
 
 ## Scripts
 
