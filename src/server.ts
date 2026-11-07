@@ -48,7 +48,7 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 function landing(cfg: Config): string {
   const base = esc(cfg.publicUrl);
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>GrowthScout</title><meta name="theme-color" content="#07070a"><link rel="stylesheet" href="/style.css"></head><body>
+<title>GrowthScout</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><meta name="theme-color" content="#07070a"><link rel="stylesheet" href="/style.css"></head><body>
 <header class="wrap nav"><a class="logo" href="/">growth<i>scout</i></a>
 <nav class="navlinks"><a class="hide" href="/api/sample">Sample</a><a class="hide" href="/api/receipts">Ledger</a><a class="hide" href="/.well-known/agent.json">Identity</a><a class="btn" href="/pay">Get your audit &rarr;</a></nav></header>
 <section class="hero"><canvas id="orb" aria-hidden="true"></canvas><div class="wrap">
@@ -111,6 +111,7 @@ export function createApp(cfg: Config, deps: AppDeps = {}): Express {
   // Browser payment page for independent customers. pay.js is a committed bundle (npm run build:pay).
   const publicDir = fileURLToPath(new URL("../public/", import.meta.url));
   app.get("/pay", (_req, res) => res.sendFile(publicDir + "pay.html"));
+  app.get("/favicon.svg", (_req, res) => res.type("image/svg+xml").sendFile(publicDir + "favicon.svg"));
   app.get("/style.css", (_req, res) => res.type("css").sendFile(publicDir + "style.css"));
   app.get("/pay.js", (_req, res) => res.type("js").sendFile(publicDir + "pay.js"));
   app.get("/health", async (_req, res) => {

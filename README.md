@@ -1,4 +1,8 @@
+<p align="center"><img src="assets/logo.png" alt="GrowthScout" width="520"></p>
+
 # GrowthScout
+
+**Live:** https://growth-scout.onrender.com/pay · **Demo video:** https://youtu.be/nGerOmvTCkM
 
 A growth-intelligence agent for Web3 projects, built for the **Celo "Agents on Open Rails"** hackathon.
 
@@ -51,6 +55,16 @@ All on Celo mainnet. Every hash below can be opened on [Celoscan](https://celosc
 | Supplier: YouTube search through buy | `0x09de2e6210f7370150d7e793e37af24472a63e7e97c7197fd39beb250f81479f` |
 
 Each report cost the agent about $0.015 in data and sold for $0.10. Both reports were for GG Attention, a project the author also builds.
+
+**Paid report 3** (full audit with follow-up purchases, run on Block Slide by the Block Slide developer from their own wallet; not counted as an independent customer below)
+
+| Step | Tx |
+|---|---|
+| Customer paid $0.10 USDC via x402 (payer `0x1C47Cb8C…43B73e77A`) | `0xf0959cf1a37c41ef63bd01be0d4971e3a25221eab757be5d78c50bb96aaf707a` |
+| Supplier: X search through buy | `0x4fd2a5a5bce063980badc5fc7a4ea1834d6b36c9974e866ead5da0a3af752aab` |
+| Supplier: Reddit search through buy | `0x30f1ae5238b9c99206c5b79a30d1b2a3180fa234622b09619c337fe18bdf8ebd` |
+| Supplier: YouTube search through buy | `0xc95eb613a4a02a6761597f63d2d454079f5f1ffb4101ba8f807a80024a8d57c1` |
+| Supplier: X profile lookup through buy | `0x426722249bb0bf66bf3a0de2b48f8a8935d77fdddecb31a9f756e1357181196b` |
 
 **Disclosures.**
 - Both payments came from a wallet the author controls (`0x0902…02D9`). They are **developer-funded tests, not independent customers**.

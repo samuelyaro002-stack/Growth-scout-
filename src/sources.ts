@@ -89,7 +89,7 @@ function toText(v: unknown): string {
 function toAuthor(v: unknown): string | undefined {
   if (typeof v === "string" && v) return v.replace(/^@/, "");
   if (isObj(v)) {
-    const inner = pick(v, ["username", "screen_name", "handle", "name", "unique_id", "title"]);
+    const inner = pick(v, ["username", "screen_name", "handle", "display_name", "name", "unique_id", "title"]);
     if (typeof inner === "string" && inner) return inner.replace(/^@/, "");
   }
   return undefined;
@@ -100,7 +100,7 @@ const LIKE_KEYS = ["likes", "like_count", "likeCount", "favorite_count", "favori
 const REPLY_KEYS = ["replies", "reply_count", "replyCount", "comments", "comment_count", "commentCount", "num_comments"];
 const SHARE_KEYS = ["retweets", "retweet_count", "retweetCount", "shares", "share_count", "reposts", "quote_count"];
 const VIEW_KEYS = ["views", "view_count", "viewCount", "impressions", "play_count", "playCount"];
-const AUTHOR_KEYS = ["author", "username", "user", "screen_name", "channelTitle", "channel", "subreddit", "handle"];
+const AUTHOR_KEYS = ["author", "username", "user", "screen_name", "channelTitle", "channel", "subreddit", "handle", "display_name"];
 const ID_KEYS = ["id", "id_str", "videoId", "video_id", "rest_id", "name"];
 const URL_KEYS_BY_SOURCE: Record<Source, string[]> = {
   x: ["permalink", "url", "postUrl", "link"],
@@ -109,7 +109,7 @@ const URL_KEYS_BY_SOURCE: Record<Source, string[]> = {
   youtube: ["permalink", "url", "watch_url", "video_url", "link", "postUrl"],
 };
 const PUBLISHED_AT_KEYS = [
-  "publishedAt", "published_at", "created_at", "createdAt", "posted_at",
+  "publishedAt", "published_at", "published_time", "created_at", "createdAt", "posted_at",
   "upload_date", "published", "created", "date", "timestamp",
 ];
 
